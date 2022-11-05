@@ -1,0 +1,990 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+# ---
+# title: "Tables for ES"
+# author:
+#   - Aolin Gong^[University of Illinois, Urbana-Champaign, aoling2@illinois.edu]
+# output: html_document
+# 
+# ---
+
+```{r table-preparation, echo = F}
+library(knitr)
+
+opts_chunk$set(
+  fig.align = "center",
+  fig.retina = 5,
+  warning = F,
+  message = F,
+  cache = F,
+  echo = F,
+  fig.cap = TRUE
+)
+```
+
+```{r table-library, cache = F}
+#=== Packages ===#
+library(sf)
+library(data.table)
+library(dplyr)
+library(data.table)
+library(modelsummary)
+library(patchwork)
+library(flextable)
+library(officedown)
+library(here)
+library(officer)
+library(latex2exp)
+source(here("./Code/functions.R"))
+```
+
+```{r tab.id = "data-summary-0", tab.cap = "MRTN recommendation for the forty-two trials in different regions and years"}
+all_field_data <- readRDS(here("./Data/all_field_data.rds")) %>%
+  arrange(state, region, farm, field) %>%
+  dplyr::select('region', 'farm', 'fake_farm', 'field', 'fake_field', 'year', 'MRTN', 'MRTN_min', 'MRTN_max') %>%
+  distinct()
+
+data_summary_0 <- all_field_data %>%
+  dplyr::mutate(Region = gsub("_"," ",region)
+         ) %>%
+  dplyr::select(
+         Region,
+         fake_farm,
+         fake_field,
+         year,
+         MRTN,
+         MRTN_min,
+         MRTN_max
+  )%>%
+  as_grouped_data(groups = c("Region")) %>%
+  as_flextable()%>%
+  bold(j = 1, i = ~ !is.na(Region), bold = TRUE, part = "body") %>%
+  bold(part = "header", bold = TRUE) %>%
+  # colformat_double(i = ~ is.na(region), j = "fake_farm", digits = 0, big.mark = "") %>%
+  merge_v(j = c("fake_farm", "fake_field"))%>%
+  fontsize(size = 9, part = "all")%>%
+  # fontsize(size = 6, part = "body")%>%
+  # width(j = 3:5, 1, unit = "in")%>%
+  # theme_vanilla() %>%
+  set_header_labels(
+    fake_farm = "Farm",
+    fake_field = "Field",
+    year = 'Year',
+    MRTN = "MRTN \n (lb/ac)",
+    MRTN_min = "MRTN Low (lb/ac)",
+    MRTN_max = "MRTN High (lb/ac)"
+  ) %>%
+  # italic(j = 1) %>%
+  # hline(
+  #   i = c(4,5,8,13,15,18,22,30,32,36,42),
+  #   border = fp_border(color = "black", width = 2),
+  #   part = "body"
+  # )%>%
+  # hline(
+  #   i = c(2,6,7,11,14,16,17,19,21,25,28,35,37,39),
+  #   border = fp_border(color = "black", width = 1),
+  #   part = "body"
+  # )%>%
+  border_inner_h()%>%
+  align_text_col(., align = "center") %>%
+  align(., i = c(1,14,24,39), j = 1, align = "left", part = "body") %>%
+  align_nottext_col(., align = "center") %>%
+  valign(j = 2, valign = "center", part = "all") %>%
+  # line_spacing(space = 0.3, part = "all")
+  add_footer_row(values = "Note: In addition to the MRTN rate, the MRTN website provides nitrogen rate ranges that could be considered profitable nitrogen ranges because nitrogen rates within this range would produce a net return of less than -$1/acre when compared to the MRTN rate. The low and high ends of the MRTN profitable range are termed as MRTN low and MRTN high in this table.", colwidths = 6) %>%
+  fix_border_issues()
+
+data_summary_0 <- data_summary_0 %>%
+                  FitFlextableToPage()
+
+data_summary_0
+
+saveRDS(data_summary_0, here("Tables", "data_summary_0.rds"))
+```
+
+`r run_pagebreak()`
+
+```{r tab.id = "data-summary-1", tab.cap = "Descriptive statistics for the forty-two trials"}
+summarized_data <- readRDS(here("./Data/summarized_data.rds")) 
+
+all_field_data <- readRDS(here("./Data/all_field_data.rds")) %>%
+  arrange(state, region, farm, field) %>%
+  dplyr::select('region', 'farm', 'fake_farm', 'field', 'fake_field', 'year', 'MRTN', 'MRTN_min', 'MRTN_max') %>%
+  distinct()
+
+setDT(summarized_data)[all_field_data, region := region, on = .(fake_farm, fake_field, year)]
+
+data_summary_1 <- summarized_data %>%
+  dplyr::mutate(Region = gsub("_"," ",region)
+         ) %>%
+  dplyr::select(
+         Region,
+         fake_farm,
+         fake_field,
+         year,
+         yield_mean,
+         yield_10,
+         yield_90,
+         yield_sd,
+         n_mean,
+         n_10,
+         n_90,
+         n_sd
+  )%>%
+  as_grouped_data(groups = c("Region")) %>%
+  as_flextable()%>%
+  bold(j = 1, i = ~ !is.na(Region), bold = TRUE, part = "body") %>%
+  bold(part = "header", bold = TRUE) %>%
+  # fontsize(size = 6, part = "header")%>%
+  fontsize(size = 9, part = "all")%>%
+  # width(j = 2, 0.8, unit = "in")%>%
+  # width(j = 3, 0.7, unit = "in")%>%
+  # width(j = 4:11, 0.7, unit = "in")%>%
+  # theme_vanilla()%>%
+  add_header(.,yield_mean = "Dry Yield (bu/ac)", yield_10 = "Dry Yield (bu/ac)", yield_90 = "Dry Yield (bu/ac)", yield_sd = "Dry Yield (bu/ac)",
+               n_mean = "Applied Nitrogen (lb/ac)", n_10 = "Applied Nitrogen (lb/ac)", 
+               n_90 = "Applied Nitrogen (lb/ac)", n_sd = "Applied Nitrogen (lb/ac)",
+               top = TRUE)%>%
+  set_header_labels(
+    fake_farm = "Farm",
+    fake_field = 'Field',
+    year = "Year",
+    yield_mean = "Mean",
+    yield_10 = "First Decile",
+    yield_90 = "Ninth Decile",
+    yield_sd = "SD",
+    n_mean = "Mean",
+    n_10 = "First Decile",
+    n_90 = "Ninth Decile",
+    n_sd = "SD"
+  ) %>%
+  merge_h(., part = "header")%>%
+  merge_v(j = c("fake_farm", "fake_field")) %>%
+  # italic(j = 1) %>%
+  # hline(
+  #   i = c(3, 4, 7, 12, 14, 17, 21, 29, 31, 35, 41, 42), 
+  #   border = fp_border(color = "black", width = 1.5) 
+  # )%>%
+  # hline(
+  #   i = c(1,5,6,10,13,15,16,18,20,24,27,30,34,36,38), 
+  #   border = fp_border(color = "black", width = 1) 
+  # )%>%
+  vline(
+    j = c(3,7), 
+    border = fp_border(color = "grey",style = "dashed", width = 1.5) 
+  )%>%
+  align_text_col(., align = "center") %>%
+  align(., i = c(1,14,24,39), j = 1, align = "left", part = "body") %>%
+  align_nottext_col(., align = "center") %>%
+  footnote(
+    i = 1, j =c(4,8), part = "header",
+    value = as_paragraph(
+      c("This column provides an overview of the cleaned dry yield volumn data, including the mean, first decile, ninth decile, and standard deviation.",
+        "This column provides an overview of the cleaned applied nitrogen data, including the mean, first decile, ninth decile, and standard deviation.")
+    ),
+    ref_symbols = c("a","b")
+  ) %>%
+  border_inner_h()
+  # border_inner_v(border = fp_border(color = "black")) %>%
+  # line_spacing(space = 0.2, part = "all") %>%
+  # line_spacing(i = 2, space = 0.6, part = "all")
+  # autofit()
+
+data_summary_1 <- data_summary_1 %>%
+                  FitFlextableToPage()
+
+data_summary_1
+
+saveRDS(data_summary_1, here("Tables", "data_summary_1.rds"))
+```
+
+`r run_pagebreak()`
+
+```{r tab.id = "historical-price", tab.cap = "Historical corn and nitrogen prices used in this research"}
+historical_price <- readRDS(here("./Data/historical_price.rds")) %>%
+  dplyr::select("year", "corn", "n", "ratio") %>%
+  flextable() %>% 
+  # theme_vanilla() %>%
+  fontsize(size = 9, part = "all")%>%
+  bold(part = "header", bold = TRUE) %>%
+  set_header_labels(
+    year = "Year",
+    corn = "Corn Price \n ($/bu)",
+    n = 'Nitrogen Price \n ($/lb)',
+    # s = "Seed Price \n ($/K)",
+    ratio = 'Nitrogen/Corn Price Ratio'
+   ) %>%
+  align_text_col(., align = "center") %>%
+  align_nottext_col(., align = "center") %>%
+  add_footer_row(values = "Note: The prices are determined by averaging the daily price from January to March, as well as from October to November, when farmers buy fertilizer and seed.", colwidths = 4) %>%
+  border_inner_h()
+
+historical_price <- historical_price %>%
+                  FitFlextableToPage()
+
+historical_price
+
+saveRDS(historical_price, here("Tables", "historical_price.rds"))
+```
+
+`r run_pagebreak()`
+
+```{r tab.id = "onr-4", tab.cap = "Optimal nitrogen rates estimated by four different models"}
+analysis_res_e_all <- data.table()
+
+all_field_data <- readRDS(here("./Data/all_field_data.rds")) %>%
+  arrange(state, region, farm, field) %>%
+  dplyr::select('region', 'farm', 'fake_farm', 'field', 'fake_field', 'year', 'MRTN', 'MRTN_min', 'MRTN_max',"vc") %>%
+  distinct()
+
+farm_field_year_ls <- readRDS(here("./Data/farm_field_year_ls.rds")) 
+
+for (i in 1:nrow(farm_field_year_ls)){
+  analysis_data_temp <- CJ(region = 0, farm = 0, field = 0, 
+                           year = 0, onr_gam = 0, onr_scam = 0, 
+                           onr_se = 0, onr_qp = 0,
+                           gc_min = 0, gc_max = 0)
+  ffy <- paste(farm_field_year_ls[i,"farm"], farm_field_year_ls[i,"field"], farm_field_year_ls[i,"year"],
+               sep = "_")
+ ###scam temp 
+  scam_data_temp <- tryCatch(
+    {
+  scam_data <- readRDS(here("Data", ffy, "scam_reg_result.rds")) %>%
+    .[c("opt_n_data","res_model")]
+  scam_data_temp<- scam_data$opt_n_data[[1]] %>%
+    data.table() %>%
+    dplyr::select(opt_n) %>%
+    rename(onr_scam = opt_n) %>%
+    mutate(type = case_when(scam_data$res_model[[1]]=="scam"~"scam",
+                            scam_data$res_model[[1]]=="gam"~"gam"))
+   },
+     error = function(cond){
+      return(NULL)
+     }
+  )
+   
+###gam temp 
+  gam_data_temp <- tryCatch(
+    {
+  gam_data_temp <- readRDS(here("Data", ffy, "gam_reg_result.rds")) %>%
+    .["opt_n_data"]
+  gam_data_temp <- gam_data_temp$opt_n_data[[1]] %>%
+    data.table() %>%
+    dplyr::select(opt_n) %>%
+    rename(onr_gam = opt_n)},
+     error = function(cond){
+      return(NULL)
+     }
+  )
+
+###sem temp
+  se_data_temp <- tryCatch(
+    {
+  se_data_temp <- readRDS(here("Data", ffy, "se_reg_result.rds")) %>%
+    .["opt_n_data"]
+  se_data_temp <- se_data_temp$opt_n_data[[1]] %>%
+    data.table() %>%
+    dplyr::select(opt_n) %>%
+    rename(onr_se = opt_n)},
+     error = function(cond){
+      return(NULL)
+     }
+  )
+  
+###qp temp
+  qp_data_temp <- tryCatch(
+    {
+  qp_data_temp <- readRDS(here("Data", ffy, "qp_reg_result.rds")) %>%
+    .["opt_n_data"]
+  qp_data_temp <- qp_data_temp$opt_n_data[[1]] %>%
+    data.table() %>%
+    dplyr::select(opt_n) %>%
+    rename(onr_qp = opt_n)},
+     error = function(cond){
+      return(NULL)
+     }
+  )
+  
+###gc temp
+  gc_temp <- readRDS(here("Data", ffy, "gam_mrtn_min.rds")) %>%
+    .["data"]
+  gc_temp <- gc_temp$data[[1]]
+  
+  analysis_data_temp$region <- farm_field_year_ls[i,"region"]
+  analysis_data_temp$farm <- strsplit(ffy, "_")[[1]][1]
+  analysis_data_temp$field <- strsplit(ffy, "_")[[1]][2]
+  analysis_data_temp$year <- strsplit(ffy, "_")[[1]][3] 
+  analysis_data_temp$onr_gam <- if(is.null(gam_data_temp)){"NA"
+                                 }else if(nrow(gam_data_temp) == 0){"NA"
+                                    }else{gam_data_temp}
+  analysis_data_temp$onr_scam <- if(is.null(scam_data_temp)){"NA"
+                                  }else if(nrow(scam_data_temp) == 0){"NA"
+                                    }else{scam_data_temp$onr_scam}
+  analysis_data_temp$onr_se <- if(is.null(se_data_temp)){"NA"
+                                  }else if(nrow(se_data_temp) == 0){"NA"
+                                    }else{se_data_temp}
+  analysis_data_temp$onr_qp <- if(is.null(qp_data_temp)){"NA"
+                                  }else if(nrow(qp_data_temp) == 0){"NA"
+                                    }else{qp_data_temp}
+  analysis_data_temp$gc_min <- min(gc_temp$gc_rate)
+  analysis_data_temp$gc_max <- max(gc_temp$gc_rate)
+
+  analysis_data_temp <- analysis_data_temp %>%
+    mutate_if(is.numeric, round, digits = 1)
+  
+  analysis_data_temp$gc_range <- ifelse(analysis_data_temp$gc_min == analysis_data_temp$gc_max, 
+                                        analysis_data_temp$gc_min, 
+                                        paste0("(",analysis_data_temp$gc_min,",",
+                                                   analysis_data_temp$gc_max,")"))
+   
+  analysis_res_e_all <- if(nrow(analysis_res_e_all) == 0){
+                        analysis_data_temp} else{rbind(analysis_res_e_all, analysis_data_temp)}
+  
+}
+
+setDT(analysis_res_e_all)[all_field_data, MRTN := MRTN, on = .(farm, field, year)]
+setDT(analysis_res_e_all)[all_field_data, MRTN_min := MRTN_min, on = .(farm, field, year)]
+setDT(analysis_res_e_all)[all_field_data, MRTN_max := MRTN_max, on = .(farm, field, year)]
+setDT(analysis_res_e_all)[all_field_data, fake_farm := fake_farm, on = .(farm, field, year)]
+setDT(analysis_res_e_all)[all_field_data, fake_field := fake_field, on = .(farm, field, year)]
+setDT(analysis_res_e_all)[all_field_data, vc := vc, on = .(farm, field, year)]
+
+onr <- analysis_res_e_all %>% 
+  dplyr::mutate(Region = gsub("_"," ",region)
+         ) %>%
+  dplyr::mutate(onr_gam = ifelse(vc=="invalid", "NA", onr_gam),
+         onr_scam = ifelse(vc=="invalid", "NA", onr_scam),
+         onr_se = ifelse(vc=="invalid", "NA", onr_se),
+         onr_qp = ifelse(vc=="invalid", "NA", onr_qp)) %>%
+  dplyr::select(
+         Region,
+         fake_farm,
+         fake_field,
+         year,
+         MRTN,
+         MRTN_min,
+         MRTN_max,
+         onr_gam,
+         onr_scam,
+         onr_se,
+         onr_qp,
+         gc_range
+  ) %>%
+  as_grouped_data(groups = c("Region")) %>%
+  as_flextable(
+    col_keys = c(
+    "fake_farm", "fake_field", "year",
+    "MRTN", "onr_gam", "onr_scam",
+    "onr_se", "onr_qp", "gc_range"
+  )) %>%
+  bold(j = 1, i = ~ !is.na(Region), bold = TRUE, part = "body") %>%
+  bold(part = "header", bold = TRUE) %>%
+  width(j = 4, 0.9, unit = "in")%>%
+  fontsize(size = 9, part = "all")%>%
+  # theme_vanilla()%>%
+  set_header_labels(
+    fake_farm = "Farm",
+    fake_field = 'Field',
+    year = "Year",
+    MRTN = "MRTN \n (lb/ac)",
+    onr_gam = "GAM \n (lb/ac)",
+    onr_scam = "SCAM \n (lb/ac)",
+    onr_se = "SEM \n (lb/ac)",
+    onr_qp = "QPM \n (lb/ac)",
+    gc_range = "Grower Chosen Rate (lb/ac)"
+  ) %>%
+  compose(
+    j = "MRTN",
+    value = as_paragraph(
+     paste0(MRTN),
+     "\n",
+     paste0("(",MRTN_min,", ",MRTN_max,")"))
+  ) %>%
+  merge_v(j = c("fake_farm", "fake_field")) %>%
+  align_text_col(., align = "center") %>%
+  align(., i = c(1,14,24,39), j = 1, align = "left", part = "body") %>%
+  align_nottext_col(., align = "center") %>%
+  border_inner_h() %>%
+  footnote(
+    i = 1, j =c(4,5,6,7,8,9), part = "header",
+    value = as_paragraph(
+      c("This column provides the MRTN rates obtained from the MRTN website, and the profitable range is presented below the MRTN rates.",
+        "This column provides the optimal nitrogen rate estimated by the gam model.",
+        "This column provides the optimal nitrogen rate estimated by the scam model. It indicates that the scam model dose not converge when it is NA.",
+        "This column provides the optimal nitrogen rate estimated by the spatial error model.",
+        "This column provides the optimal nitrogen rate estimated by the quadratic plateau model. It indicates that the there exists a singularity issue in the regression when it is NA.",
+        "The grower chosen rates are shown in this column. When a commercial prescription map is available, a range is given, and when a farmer is adhering to a previous rate, a single rate is given. When the grower selected rates are significantly lower than in other fields and years, a base rate farmer would have been applied in advance, but we are unsure of what the base rate would have been.")
+    ),
+    ref_symbols = c("a","b","c","d","e","f")
+  ) %>%
+  add_footer_row(values = "Note: All four models' estimates of the optimal nitrogen rate will be NA when the MRTN rate is outside the trial's applied nitrogen rate range because the MRTN rate cannot be compared to the estimations in that situation.", colwidths = 9) %>%
+  fix_border_issues()
+
+onr <- onr %>%
+                  FitFlextableToPage()
+
+onr
+
+saveRDS(onr, here("Tables", "onr-4.rds"))
+```
+
+`r run_pagebreak()`
+
+```{r tab.id = "onr", tab.cap = "Optimal nitrogen rates estimated by GAM and SCAM"}
+analysis_res_e_all <- data.table()
+
+all_field_data <- readRDS(here("./Data/all_field_data.rds")) %>%
+  arrange(state, region, farm, field) %>%
+  dplyr::select('region', 'farm', 'fake_farm', 'field', 'fake_field', 'year', 'MRTN', 'MRTN_min', 'MRTN_max',"vc") %>%
+  distinct()
+
+farm_field_year_ls <- readRDS(here("./Data/farm_field_year_ls.rds")) 
+
+for (i in 1:nrow(farm_field_year_ls)){
+  analysis_data_temp <- CJ(region = 0, farm = 0, field = 0, 
+                           year = 0, onr_gam = 0, onr_scam = 0, 
+                           onr_se = 0, onr_qp = 0,
+                           gc_min = 0, gc_max = 0)
+  ffy <- paste(farm_field_year_ls[i,"farm"], farm_field_year_ls[i,"field"], farm_field_year_ls[i,"year"],
+               sep = "_")
+ ###scam temp 
+  scam_data_temp <- tryCatch(
+    {
+  scam_data <- readRDS(here("Data", ffy, "scam_reg_result.rds")) %>%
+    .[c("opt_n_data","res_model")]
+  scam_data_temp<- scam_data$opt_n_data[[1]] %>%
+    data.table() %>%
+    dplyr::select(opt_n) %>%
+    rename(onr_scam = opt_n) %>%
+    mutate(type = case_when(scam_data$res_model[[1]]=="scam"~"scam",
+                            scam_data$res_model[[1]]=="gam"~"gam"))
+   },
+     error = function(cond){
+      return(NULL)
+     }
+  )
+   
+###gam temp 
+  gam_data_temp <- tryCatch(
+    {
+  gam_data_temp <- readRDS(here("Data", ffy, "gam_reg_result.rds")) %>%
+    .["opt_n_data"]
+  gam_data_temp <- gam_data_temp$opt_n_data[[1]] %>%
+    data.table() %>%
+    dplyr::select(opt_n) %>%
+    rename(onr_gam = opt_n)},
+     error = function(cond){
+      return(NULL)
+     }
+  )
+
+###sem temp
+  se_data_temp <- tryCatch(
+    {
+  se_data_temp <- readRDS(here("Data", ffy, "se_reg_result.rds")) %>%
+    .["opt_n_data"]
+  se_data_temp <- se_data_temp$opt_n_data[[1]] %>%
+    data.table() %>%
+    dplyr::select(opt_n) %>%
+    rename(onr_se = opt_n)},
+     error = function(cond){
+      return(NULL)
+     }
+  )
+  
+###qp temp
+  qp_data_temp <- tryCatch(
+    {
+  qp_data_temp <- readRDS(here("Data", ffy, "qp_reg_result.rds")) %>%
+    .["opt_n_data"]
+  qp_data_temp <- qp_data_temp$opt_n_data[[1]] %>%
+    data.table() %>%
+    dplyr::select(opt_n) %>%
+    rename(onr_qp = opt_n)},
+     error = function(cond){
+      return(NULL)
+     }
+  )
+  
+###gc temp
+  gc_temp <- readRDS(here("Data", ffy, "gam_mrtn_min.rds")) %>%
+    .["data"]
+  gc_temp <- gc_temp$data[[1]]
+  
+  analysis_data_temp$region <- farm_field_year_ls[i,"region"]
+  analysis_data_temp$farm <- strsplit(ffy, "_")[[1]][1]
+  analysis_data_temp$field <- strsplit(ffy, "_")[[1]][2]
+  analysis_data_temp$year <- strsplit(ffy, "_")[[1]][3] 
+  analysis_data_temp$onr_gam <- if(is.null(gam_data_temp)){"NA"
+                                 }else if(nrow(gam_data_temp) == 0){"NA"
+                                    }else{gam_data_temp}
+  analysis_data_temp$onr_scam <- if(is.null(scam_data_temp)){"NA"
+                                  }else if(nrow(scam_data_temp) == 0){"NA"
+                                    }else{scam_data_temp$onr_scam}
+  analysis_data_temp$onr_se <- if(is.null(se_data_temp)){"NA"
+                                  }else if(nrow(se_data_temp) == 0){"NA"
+                                    }else{se_data_temp}
+  analysis_data_temp$onr_qp <- if(is.null(qp_data_temp)){"NA"
+                                  }else if(nrow(qp_data_temp) == 0){"NA"
+                                    }else{qp_data_temp}
+  analysis_data_temp$gc_min <- min(gc_temp$gc_rate)
+  analysis_data_temp$gc_max <- max(gc_temp$gc_rate)
+
+  analysis_data_temp <- analysis_data_temp %>%
+    mutate_if(is.numeric, round, digits = 1)
+  
+  analysis_data_temp$gc_range <- ifelse(analysis_data_temp$gc_min == analysis_data_temp$gc_max, 
+                                        analysis_data_temp$gc_min, 
+                                        paste0("(",analysis_data_temp$gc_min,",",
+                                                   analysis_data_temp$gc_max,")"))
+   
+  analysis_res_e_all <- if(nrow(analysis_res_e_all) == 0){
+                        analysis_data_temp} else{rbind(analysis_res_e_all, analysis_data_temp)}
+  
+}
+
+setDT(analysis_res_e_all)[all_field_data, MRTN := MRTN, on = .(farm, field, year)]
+setDT(analysis_res_e_all)[all_field_data, MRTN_min := MRTN_min, on = .(farm, field, year)]
+setDT(analysis_res_e_all)[all_field_data, MRTN_max := MRTN_max, on = .(farm, field, year)]
+setDT(analysis_res_e_all)[all_field_data, fake_farm := fake_farm, on = .(farm, field, year)]
+setDT(analysis_res_e_all)[all_field_data, fake_field := fake_field, on = .(farm, field, year)]
+setDT(analysis_res_e_all)[all_field_data, vc := vc, on = .(farm, field, year)]
+
+onr <- analysis_res_e_all %>% 
+  dplyr::mutate(Region = gsub("_"," ",region)
+         ) %>%
+  dplyr::mutate(onr_gam = ifelse(vc=="invalid", "NA", onr_gam),
+         onr_scam = ifelse(vc=="invalid", "NA", onr_scam),
+         onr_se = ifelse(vc=="invalid", "NA", onr_se),
+         onr_qp = ifelse(vc=="invalid", "NA", onr_qp)) %>%
+  dplyr::select(
+         Region,
+         fake_farm,
+         fake_field,
+         year,
+         MRTN,
+         MRTN_min,
+         MRTN_max,
+         onr_gam,
+         onr_scam,
+         onr_se,
+         onr_qp,
+         gc_range
+  ) %>%
+  as_grouped_data(groups = c("Region")) %>%
+  as_flextable(
+    col_keys = c(
+    "fake_farm", "fake_field", "year",
+    "MRTN", "onr_gam", "onr_scam",
+    "gc_range"
+  )) %>%
+  bold(j = 1, i = ~ !is.na(Region), bold = TRUE, part = "body") %>%
+  bold(part = "header", bold = TRUE) %>%
+  width(j = 4, 0.9, unit = "in")%>%
+  fontsize(size = 9, part = "all")%>%
+  # theme_vanilla()%>%
+  set_header_labels(
+    fake_farm = "Farm",
+    fake_field = 'Field',
+    year = "Year",
+    MRTN = "MRTN \n (lb/ac)",
+    onr_gam = "GAM \n (lb/ac)",
+    onr_scam = "SCAM \n (lb/ac)",
+    # onr_se = "SEM \n (lb/ac)",
+    # onr_qp = "QPM \n (lb/ac)",
+    gc_range = "Grower Chosen Rate (lb/ac)"
+  ) %>%
+  compose(
+    j = "MRTN",
+    value = as_paragraph(
+     paste0(MRTN),
+     "\n",
+     paste0("(",MRTN_min,", ",MRTN_max,")"))
+  ) %>%
+  merge_v(j = c("fake_farm", "fake_field")) %>%
+  align_text_col(., align = "center") %>%
+  align(., i = c(1,14,24,39), j = 1, align = "left", part = "body") %>%
+  align_nottext_col(., align = "center") %>%
+  border_inner_h() %>%
+  footnote(
+    i = 1, j =c(4,5,6,7), part = "header",
+    value = as_paragraph(
+      c("This column provides the MRTN rates obtained from the MRTN website, and the profitable range is presented below the MRTN rates.",
+        "This column provides the optimal nitrogen rate estimated by the gam model.",
+        "This column provides the optimal nitrogen rate estimated by the scam model. It indicates that the scam model dose not converge when it is NA.",
+        "The grower chosen rates are shown in this column. When a commercial prescription map is available, a range is given, and when a farmer is adhering to a previous rate, a single rate is given. When the grower selected rates are significantly lower than in other fields and years, a base rate farmer would have been applied in advance, but we are unsure of what the base rate would have been.")
+    ),
+    ref_symbols = c("a","b","c","d")
+  ) %>%
+  add_footer_row(values = "Note: All four models' estimates of the optimal nitrogen rate will be NA when the MRTN rate is outside the trial's applied nitrogen rate range because the MRTN rate cannot be compared to the estimations in that situation.", colwidths = 7) %>%
+  fix_border_issues()
+
+onr <- onr %>%
+                  FitFlextableToPage()
+
+onr
+
+saveRDS(onr, here("Tables", "onr.rds"))
+```
+
+`r run_pagebreak()`
+
+```{r tab.id = "profit", tab.cap = "Profit difference estimated by GAM"}
+analysis_res_e_all <- data.table()
+
+all_field_data <- readRDS(here("./Data/all_field_data.rds")) %>%
+  arrange(state, region, farm, field) %>%
+  dplyr::select('region', 'farm', 'fake_farm', 'field', 'fake_field', 'year', 'MRTN', 'MRTN_min', 'MRTN_max',"vc") %>%
+  distinct()
+
+farm_field_year_ls <- readRDS(here("./Data/farm_field_year_ls.rds")) 
+
+for (i in 1:nrow(farm_field_year_ls)){
+  analysis_data_temp <- CJ(region = 0, farm = 0, field = 0, 
+                           year = 0, 
+                           onr_mrtn = 0, 
+                           mrtn_min = 0, mrtn_max = 0,
+                           mrtn_gc = 0)
+  ffy <- paste(farm_field_year_ls[i,"farm"], farm_field_year_ls[i,"field"], farm_field_year_ls[i,"year"],
+               sep = "_")
+  
+###ONR vs. mrtn
+  onr_mrtn_temp <- tryCatch(
+    {
+  onr_mrtn_temp <- readRDS(here("Data", ffy, "gam_onr_mrtn.rds")) %>%
+    .["pi_dif_test"]
+  onr_mrtn_temp <- onr_mrtn_temp$pi_dif_test[[1]] %>%
+    data.table() %>%
+    dplyr::select(point_est_dif) %>%
+    rename(onr_mrtn = point_est_dif)},
+     error = function(cond){
+      return(NULL)
+     }
+  )
+  
+###ONR vs. mtrn_min
+  mrtn_min_temp <- tryCatch(
+    {
+  mrtn_min_temp <- readRDS(here("Data", ffy, "gam_mrtn_min.rds")) %>%
+   .["pi_dif_test"]
+  mrtn_min_temp <- mrtn_min_temp$pi_dif_test[[1]] %>%
+    data.table() %>%
+    dplyr::select(point_est_dif) %>%
+    rename(mrtn_min = point_est_dif)},
+     error = function(cond){
+      return(NULL)
+     }
+  )
+  
+###ONR vs. mtrn_max  
+  mrtn_max_temp <- tryCatch(
+    {
+  mrtn_max_temp <- readRDS(here("Data", ffy, "gam_mrtn_max.rds")) %>%
+    .["pi_dif_test"]
+  mrtn_max_temp <- mrtn_max_temp$pi_dif_test[[1]] %>%
+    data.table() %>%
+    dplyr::select(point_est_dif) %>%
+    rename(mrtn_max = point_est_dif)},
+     error = function(cond){
+      return(NULL)
+     }
+  )
+  
+###MRTN vs. GC
+  mrtn_gc_temp <- tryCatch(
+    {
+  mrtn_gc_temp <- readRDS(here("Data", ffy, "gam_mrtn_gc.rds")) %>%
+   .["pi_dif_test"]
+  mrtn_gc_temp <- mrtn_gc_temp$pi_dif_test[[1]] %>%
+    data.table() %>%
+    dplyr::select(point_est_dif) %>%
+    rename(mrtn_gc = point_est_dif)},
+     error = function(cond){
+      return(NULL)
+     }
+  )
+  
+  analysis_data_temp$region <- farm_field_year_ls[i,"region"]
+  analysis_data_temp$farm <- strsplit(ffy, "_")[[1]][1]
+  analysis_data_temp$field <- strsplit(ffy, "_")[[1]][2]
+  analysis_data_temp$year <- strsplit(ffy, "_")[[1]][3]
+  analysis_data_temp$onr_mrtn <- if(is.null(onr_mrtn_temp)){"NA"
+                                  }else if(nrow(onr_mrtn_temp) == 0){"NA"
+                                    }else{onr_mrtn_temp}
+  analysis_data_temp$mrtn_min <- if(is.null(mrtn_min_temp)){"NA"
+                                  }else if(nrow(mrtn_min_temp) == 0){"NA"
+                                    }else{mrtn_min_temp}
+  analysis_data_temp$mrtn_max <- if(is.null(mrtn_max_temp)){"NA"
+                                  }else if(nrow(mrtn_max_temp) == 0){"NA"
+                                    }else{mrtn_max_temp}
+  analysis_data_temp$mrtn_gc <- if(is.null(mrtn_gc_temp)){"NA"
+                                  }else if(nrow(mrtn_gc_temp) == 0){"NA"
+                                    }else{mrtn_gc_temp}
+  
+  analysis_data_temp <- analysis_data_temp %>%
+    mutate_if(is.numeric, round, digits = 1)
+   
+  analysis_res_e_all <- if(nrow(analysis_res_e_all) == 0){
+                        analysis_data_temp} else{rbind(analysis_res_e_all, analysis_data_temp)}
+  
+}
+
+setDT(analysis_res_e_all)[all_field_data, MRTN := MRTN, on = .(farm, field, year)]
+setDT(analysis_res_e_all)[all_field_data, MRTN_min := MRTN_min, on = .(farm, field, year)]
+setDT(analysis_res_e_all)[all_field_data, MRTN_max := MRTN_max, on = .(farm, field, year)]
+setDT(analysis_res_e_all)[all_field_data, fake_farm := fake_farm, on = .(farm, field, year)]
+setDT(analysis_res_e_all)[all_field_data, fake_field := fake_field, on = .(farm, field, year)]
+setDT(analysis_res_e_all)[all_field_data, vc := vc, on = .(farm, field, year)]
+
+profit <- analysis_res_e_all %>% 
+  dplyr::mutate(Region = gsub("_"," ",region)
+         ) %>%
+  dplyr::mutate(onr_mrtn = ifelse(vc=="invalid", "NA", onr_mrtn),
+                mrtn_min = ifelse(vc=="invalid", "NA", mrtn_min),
+                mrtn_max = ifelse(vc=="invalid", "NA", mrtn_max),
+                mrtn_gc = ifelse(vc=="invalid", "NA", mrtn_gc)) %>%
+  dplyr::mutate(mrtn_min = ifelse(mrtn_min < 0, "NA", mrtn_min),
+                mrtn_max = ifelse(mrtn_max < 0, "NA", mrtn_max)) %>%
+  dplyr::select(
+         Region,
+         fake_farm,
+         fake_field,
+         year,
+         onr_mrtn,
+         mrtn_min,
+         mrtn_max,
+         mrtn_gc,
+  ) %>%
+  as_grouped_data(groups = c("Region")) %>%
+  as_flextable() %>%
+  bold(j = 1, i = ~ !is.na(Region), bold = TRUE, part = "body") %>%
+  bold(part = "header", bold = TRUE) %>%
+  fontsize(size = 9, part = "all")%>%
+  # theme_vanilla()%>%
+  set_header_labels(
+    fake_farm = "Farm",
+    fake_field = 'Field',
+    year = "Year",
+    onr_mrtn = "MRTN ($/ac)",
+    mrtn_min  = "MRTN Low ($/ac)",
+    mrtn_max  = "MRTN High ($/ac)",
+    mrtn_gc   = "Grower Chosen Rate ($/ac)"
+  ) %>%
+  merge_v(j = c("fake_farm", "fake_field")) %>%
+  align_text_col(., align = "center") %>%
+  align(., i = c(1,14,24,39), j = 1, align = "left", part = "body") %>%
+  align_nottext_col(., align = "center") %>%
+  border_inner_h() %>%
+  footnote(
+    i = 1, j =c(4,5,6,7), part = "header",
+    value = as_paragraph(
+      c("The profit difference between applying the MRTN rates obtained from the MRTN website and applying the optimal nitrogen rate determined by the GAM model is shown in this column.",
+        "The profit difference between using the recommended nitrogen rate determined by the GAM model and the lower end of the MRTN profitable range is shown in this column.",
+        "The profit difference between using the recommended nitrogen rate determined by the GAM model and the higher end of the MRTN profitable range is shown in this column.",
+        "This column displays the profit difference between applying the grower chosen rates and applying the MRTN rates from the MRTN website. Grower chosen rates outperforms the MRTN rates when that value is positive.")
+    ),
+    ref_symbols = c("a","b","c","d")
+  ) %>%
+  add_footer_row(values = "Note: When the MRTN rate is outside the trial's applied nitrogen rate range, the estimated profit difference will be NA in all four columns because the MRTN rate cannot be evaluated using the trial's data. While the MRTN rate is within the trial's applied nitrogen rate range and is being evaluated, the value in columns MRTN Low and MRTN High may be NA in some cases as MRTN Low and MRTN High may fall outside the nitrogen application of that trial.", colwidths = 7) %>%
+  width(j = 7, 1, unit = "in")%>%
+  fix_border_issues()
+
+profit <- profit %>%
+                  FitFlextableToPage()
+
+profit
+
+saveRDS(profit, here("Tables", "profit.rds"))
+```
+
+`r run_pagebreak()`
+
+```{r tab.id = "weather", tab.cap = "Weather for the forty-two trials"}
+weather_all <- data.table()
+
+farm_field_year_ls <- readRDS(here("./Data/farm_field_year_ls.rds"))
+
+for (i in 1:nrow(farm_field_year_ls)){
+    ffy <- paste(farm_field_year_ls[i,"farm"], farm_field_year_ls[i,"field"], farm_field_year_ls[i,"year"],
+               sep = "_")
+  
+  weather_temp <- readRDS(here("Data", ffy, "weather_info.rds")) %>%
+    select("Farm", "Field", "Year", "Planting Date", "Hybrid", "prec_poll",
+           "prec_gf", "temp_poll", "temp_gf", "prec_season", "temp_season") %>%
+    data.table()
+  weather_all <- if(nrow(weather_all) == 0){
+                        weather_temp} else{rbind(weather_all, weather_temp)}
+}
+
+weather_all <- weather_all %>%
+                rename(farm = Farm, field = Field, year = Year) 
+
+setDT(weather_all)[farm_field_year_ls, region := region, on = .(farm, field, year)]
+setDT(weather_all)[farm_field_year_ls, fake_farm := fake_farm, on = .(farm, field, year)]
+setDT(weather_all)[farm_field_year_ls, fake_field := fake_field, on = .(farm, field, year)]
+
+weather <- weather_all %>% 
+  dplyr::mutate(Region = gsub("_"," ",region)
+         ) %>%
+  dplyr::select(
+         Region,
+         fake_farm,
+         fake_field,
+         year,
+         prec_poll,
+         prec_gf,
+         prec_season,
+         temp_poll,
+         temp_gf,
+         temp_season
+  ) %>%
+  mutate_if(is.numeric, round, digits = 1) %>%
+  as_grouped_data(groups = c("Region")) %>%
+  as_flextable() %>%
+  bold(j = 1, i = ~ !is.na(Region), bold = TRUE, part = "body") %>%
+  bold(part = "header", bold = TRUE) %>%
+  add_header(.,prec_poll = "Precipitation (in)", 
+               prec_gf = "Precipitation (in)", 
+               prec_season = "Precipitation (in)",
+               temp_poll = "Temperature(Fahrenheit)", 
+               temp_gf = "Temperature(Fahrenheit)", 
+               temp_season = "Temperature(Fahrenheit)", 
+               top = TRUE)%>%
+  merge_h(., part = "header")%>%
+  compose(
+    part = "header",
+    j = 7,
+    value = as_paragraph(
+     "Temperature ",
+     "(\u00B0F)")
+  ) %>%
+  set_header_labels(
+    fake_farm = "Farm",
+    fake_field = 'Field',
+    year = "Year",
+    prec_poll = "Pollination Cycle",
+    prec_gf = 'Grain Filling Cycle',
+    prec_season = "Growing Season",
+    temp_poll = "Pollination Cycle",
+    temp_gf = 'Grain Filling Cycle',
+    temp_season = "Growing Season"
+  ) %>%
+  width(j = c(5,8), 1, unit = "in")%>%
+  # theme_vanilla() %>%
+  fontsize(size = 9, part = "all")%>%
+  vline(
+    j = c(3,6), 
+    border = fp_border(color = "grey",style = "dashed", width = 1.5) 
+  )%>%
+  merge_v(j = c("fake_farm", "fake_field")) %>%
+  align_text_col(., align = "center") %>%
+  align(., i = c(1,14,24,39), j = 1, align = "left", part = "body") %>%
+  align_nottext_col(., align = "center") %>%
+  border_inner_h() %>%
+  footnote(
+    i = 1, j =c(4,7), part = "header",
+    value = as_paragraph(
+      c("The precipitation over the duration of the growing season, including the ten days of the pollination cycle, the ten days of the grain-fill period between pollination and maturity, and the entire growing season, is summarized in this column.",
+        "The temperature over the duration of the growing season, including the ten days of the pollination cycle, the ten days of the grain-fill period between pollination and maturity, and the entire growing season, is summarized in this column.")
+    ),
+    ref_symbols = c("a","b")
+  ) %>%
+  add_footer_row(values = "Note: The hybrid that was planted for each trial is recorded, and the breeders' websites  commonly offer an estimation of the growing degree days until pollination and maturity. Using this information, the planting date, and the daily weather data from DaymetR, we determine the pollination and maturity dates for each trial. The weather is then calculated around the critical growth stages, and its impacts on the estimation of the optimal nitrogen rates can be examined.", colwidths = 9) %>%
+  fix_border_issues()
+
+weather <- weather %>%
+           FitFlextableToPage()
+
+weather
+
+saveRDS(weather, here("Tables", "weather.rds"))
+```
+
+```{r tab.id = "eonr-weather", tab.cap = "Regression of EONR on weather"}
+analysis_res_e_all <- data.table()
+
+all_field_data <- readRDS(here("./Data/all_field_data.rds")) %>%
+  arrange(state, region, farm, field) %>%
+  dplyr::select('region', 'farm', 'fake_farm', 'field', 'fake_field', 'year', 'MRTN', 'MRTN_min', 'MRTN_max',"vc") %>%
+  distinct()
+
+farm_field_year_ls <- readRDS(here("./Data/farm_field_year_ls.rds")) 
+
+for (i in 1:nrow(farm_field_year_ls)){
+  analysis_data_temp <- CJ(region = 0, farm = 0, field = 0, 
+                           year = 0, onr_gam = 0)
+  ffy <- paste(farm_field_year_ls[i,"farm"], farm_field_year_ls[i,"field"], farm_field_year_ls[i,"year"],
+               sep = "_")
+
+###gam temp 
+  gam_data_temp <- tryCatch(
+    {
+  gam_data_temp <- readRDS(here("Data", ffy, "gam_reg_result.rds")) %>%
+    .["opt_n_data"]
+  gam_data_temp <- gam_data_temp$opt_n_data[[1]] %>%
+    data.table() %>%
+    dplyr::select(opt_n) %>%
+    rename(onr_gam = opt_n)},
+     error = function(cond){
+      return(NULL)
+     }
+  )
+  analysis_data_temp$region <- farm_field_year_ls[i,"region"]
+  analysis_data_temp$farm <- strsplit(ffy, "_")[[1]][1]
+  analysis_data_temp$field <- strsplit(ffy, "_")[[1]][2]
+  analysis_data_temp$year <- strsplit(ffy, "_")[[1]][3] 
+  analysis_data_temp$onr_gam <- if(is.null(gam_data_temp)){"NA"
+                                 }else if(nrow(gam_data_temp) == 0){"NA"
+                                 }else{gam_data_temp}
+  
+  analysis_data_temp <- analysis_data_temp %>%
+    mutate_if(is.numeric, round, digits = 1)
+  
+   
+  analysis_res_e_all <- if(nrow(analysis_res_e_all) == 0){
+                        analysis_data_temp} else{rbind(analysis_res_e_all, analysis_data_temp)}
+  
+}
+
+setDT(analysis_res_e_all)[all_field_data, MRTN := MRTN, on = .(farm, field, year)]
+setDT(analysis_res_e_all)[all_field_data, MRTN_min := MRTN_min, on = .(farm, field, year)]
+setDT(analysis_res_e_all)[all_field_data, MRTN_max := MRTN_max, on = .(farm, field, year)]
+setDT(analysis_res_e_all)[all_field_data, fake_farm := fake_farm, on = .(farm, field, year)]
+setDT(analysis_res_e_all)[all_field_data, fake_field := fake_field, on = .(farm, field, year)]
+setDT(analysis_res_e_all)[all_field_data, vc := vc, on = .(farm, field, year)]
+
+weather_all <- data.table()
+
+for (i in 1:nrow(farm_field_year_ls)){
+    ffy <- paste(farm_field_year_ls[i,"farm"], farm_field_year_ls[i,"field"], farm_field_year_ls[i,"year"],
+               sep = "_")
+  
+  weather_temp <- readRDS(here("Data", ffy, "weather_info.rds")) %>%
+    select("Farm", "Field", "Year", "Planting Date", "Hybrid", "prec_poll",
+           "prec_gf", "temp_poll", "temp_gf", "prec_season", "temp_season") %>%
+    data.table()
+  weather_all <- if(nrow(weather_all) == 0){
+                        weather_temp} else{rbind(weather_all, weather_temp)}
+}
+
+weather_all <- weather_all %>%
+                rename(farm = Farm, field = Field, year = Year) 
+
+setDT(weather_all)[farm_field_year_ls, region := region, on = .(farm, field, year)]
+setDT(weather_all)[farm_field_year_ls, fake_farm := fake_farm, on = .(farm, field, year)]
+setDT(weather_all)[farm_field_year_ls, fake_field := fake_field, on = .(farm, field, year)]
+
+onr_weather <- left_join(analysis_res_e_all, weather_all, by = c('region', 'farm', 'field', 'year', 'fake_farm', 'fake_field'))
+  
+onr_weather_lm <- lm(onr_gam-MRTN~prec_season + temp_season, onr_weather)
+onr_weather_lm2 <- lm(onr_gam-MRTN~prec_poll + prec_gf + temp_poll + temp_gf, onr_weather)
+summary(onr_weather_lm)
+summary(onr_weather_lm2)
+```
+
+
+

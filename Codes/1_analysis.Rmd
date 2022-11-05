@@ -1,0 +1,536 @@
+
+# Analysis
+
+In this part, we estimate the production functions, derive the optimal nitrogen rate from the production functions, and then estimate the profit difference between applying MRTN range  the optimal nitrogen rate, as well as grower chosen rates.
+
+```{r var, cache=TRUE}
+var_ls <- c("obs_id",        "yild_vl",         "s_rate",          "n_rate",
+            "elevatn",       "f290404",         "f485941",         "slope",                          "aspect",        "curv",            "twi" ,            "tpi",                            "ecd",           "ecs",             "x",               "geometry")
+```
+
+```{r load-data, cache=FALSE}
+data_sf <- read_data(ffy, var_ls)
+w_field_data$crop_price <- historical_price[year == strsplit(ffy, "_")[[1]][3], corn]
+w_field_data$n_price <- historical_price[year == strsplit(ffy, "_")[[1]][3], n]
+w_field_data$s_price <- historical_price[year == strsplit(ffy, "_")[[1]][3], s]
+
+w_field_data$gc_type_n <- gc_type_n
+w_field_data$gc_rate_n <- gc_rate_n
+
+w_field_data$mrtn <- all_field_data[(farm == strsplit(ffy, "_")[[1]][1])&(field == strsplit(ffy, "_")[[1]][2])&
+               (year == strsplit(ffy, "_")[[1]][3]),]$MRTN
+w_field_data$mrtn_min <- all_field_data[(farm == strsplit(ffy, "_")[[1]][1])&(field == strsplit(ffy, "_")[[1]][2])&
+               (year == strsplit(ffy, "_")[[1]][3]),]$MRTN_min
+w_field_data$mrtn_max <- all_field_data[(farm == strsplit(ffy, "_")[[1]][1])&(field == strsplit(ffy, "_")[[1]][2])&
+               (year == strsplit(ffy, "_")[[1]][3]),]$MRTN_max
+
+analysis_res_g <- w_field_data %>% 
+  mutate(data = list(data_sf)) %>% 
+  rowwise() %>%
+  mutate(
+    field_vars = list(
+      find_field_vars(data)
+    )
+  ) 
+```
+
+## Yield Response Function Estimation
+
+We use four different production function to estimate the yield response to nitrogen, namely scam, gam, spatial error model with a quadratic form, as well as a quadratic plateau model.
+
+### SCAM (GAM) Estimation
+```{r scam, cache=FALSE}
+analysis_res_scam <- analysis_res_g %>% 
+  mutate(gam_res = list(
+    run_scam_gam(data = data, field_vars = field_vars)
+  )) %>%
+  mutate(res_model = class(gam_res)[1])
+```
+
+### GAM Estimation
+```{r gam, cache=FALSE}
+analysis_res_gam <- analysis_res_g %>% 
+  mutate(gam_res = list(
+    run_gam(data = data, field_vars = field_vars)
+  )) 
+```
+
+### Quadratic_SE Estimation
+```{r se, cache=FALSE}
+analysis_res_se <- analysis_res_g %>%
+  mutate(se_res = list(
+    run_se(data = data)
+  ))
+```
+
+### Quadratic Plateau Estimation
+```{r quadratic-plateau, cache=FALSE}
+analysis_res_qp <- analysis_res_g %>% 
+  mutate(qp_res = list(
+    run_qp(data = data)
+  )) 
+```
+
+
+
+## Yield Prediction & Optimal Nitrogen Rate
+
+### SCAM Prediction
+```{r scam-prediction, cache=FALSE}
+analysis_scam_pred <- analysis_res_scam %>% 
+  #=== single average observation ===#
+  mutate(data_for_eval = list(
+    make_data_for_eval(
+      data = data,
+      est = gam_res
+    )
+  )) %>% 
+  #=== input rate sequence by zone to be tested ===#
+  mutate(n_rate_seq = list(
+    data.table(data)[, .(
+      n = seq(
+        quantile(n, 0.025),
+        quantile(n, 0.975),
+        length = 100
+      )
+    )]
+  )) %>% 
+  #=== predict yield values at different input rates ===#
+  mutate(eval_data = list(
+    predict_yield_range(
+      data_for_eval = data_for_eval, 
+      n_rate_seq = n_rate_seq,
+      est = gam_res
+    ) %>% 
+      .[, type := "opt_v"]%>% 
+      .[, .(
+        n, type, yield_hat, yield_hat_se
+      )]
+  )) %>% 
+  #=== Adjust yield values to match up with actual yields (this is purely for figures below) ===#
+  mutate(
+    #=== mean predicted yield ===#
+    mean_yield_hat_opt = 
+      list(
+        eval_data[, .(mean_yield_hat = mean(yield_hat))]
+      ), 
+    #=== mean actual yield by zone ===#
+    mean_yield_actual = 
+      list(
+        data.table(data)[, 
+                         .(mean_yield_actual = mean(yield))
+        ]
+      ),
+    eval_data = 
+      list(
+        eval_data %>% 
+          .[, profit_hat := crop_price * yield_hat - n_price * n] %>% 
+          .[, profit_hat_se := crop_price * yield_hat_se] 
+      )
+  ) %>% 
+  dplyr::select(
+    - mean_yield_hat_opt, 
+    - mean_yield_actual
+  ) %>% 
+  mutate(opt_n_data = list(
+    opt_n_data <- eval_data %>% 
+      .[, .SD[profit_hat == max(profit_hat), ]] %>% 
+      setnames("n", "opt_n") 
+  )) %>% 
+  #=== find the optimal uniform rate ===#
+    mutate(data = list(
+      mutate(
+        data, 
+        opt_n_u = find_opt_u(
+          data = data, 
+          res = gam_res,
+          crop_price = crop_price,
+          n_price = n_price
+        )
+      )
+    ))
+
+analysis_scam_pred$opt_n_data
+```
+
+
+### GAM Prediction
+```{r gam-prediction, cache=FALSE}
+analysis_gam_pred <- analysis_res_gam %>% 
+  #=== single average observation ===#
+  mutate(data_for_eval = list(
+    make_data_for_eval(
+      data = data,
+      est = gam_res
+    )
+  )) %>% 
+  #=== input rate sequence by zone to be tested ===#
+  mutate(n_rate_seq = list(
+    data.table(data)[, .(
+      n = seq(
+        quantile(n, 0.025),
+        quantile(n, 0.975),
+        length = 100
+      )
+    )]
+  )) %>% 
+  #=== predict yield values at different input rates ===#
+  mutate(eval_data = list(
+    predict_yield_range(
+      data_for_eval = data_for_eval, 
+      n_rate_seq = n_rate_seq,
+      est = gam_res
+    ) %>% 
+      .[, type := "opt_v"]%>% 
+      .[, .(
+        n, type, yield_hat, yield_hat_se
+      )]
+  )) %>% 
+  #=== Adjust yield values to match up with actual yields (this is purely for figures below) ===#
+  mutate(
+    #=== mean predicted yield ===#
+    mean_yield_hat_opt = 
+      list(
+        eval_data[, .(mean_yield_hat = mean(yield_hat))]
+      ), 
+    #=== mean actual yield by zone ===#
+    mean_yield_actual = 
+      list(
+        data.table(data)[, 
+                         .(mean_yield_actual = mean(yield))
+        ]
+      ),
+    eval_data = 
+      list(
+        eval_data %>% 
+          .[, profit_hat := crop_price * yield_hat - n_price * n] %>% 
+          .[, profit_hat_se := crop_price * yield_hat_se] 
+      )
+  ) %>% 
+  dplyr::select(
+    - mean_yield_hat_opt, 
+    - mean_yield_actual
+  ) %>% 
+  mutate(opt_n_data = list(
+    opt_n_data <- eval_data %>% 
+      .[, .SD[profit_hat == max(profit_hat), ]] %>% 
+      setnames("n", "opt_n") 
+  )) %>% 
+  #=== find the optimal uniform rate ===#
+    mutate(data = list(
+      mutate(
+        data, 
+        opt_n_u = find_opt_u(
+          data = data, 
+          res = gam_res,
+          crop_price = crop_price,
+          n_price = n_price
+        )
+      )
+    ))
+
+analysis_gam_pred$opt_n_data
+```
+
+
+### Quadratic_SE Prediction
+```{r se-prediction, cache=FALSE}
+analysis_se_pred <- analysis_res_se %>%
+  mutate(n_rate_seq = list(
+    data.table(data)[, .(
+      n = seq(
+        quantile(n, 0.025),
+        quantile(n, 0.975),
+        length = 100
+      )
+    )]
+  )) %>% 
+   mutate(eval_data = list(
+    predict_yield(
+      n_rate_seq = n_rate_seq,
+      est = se_res
+    ) %>% 
+      .[, .(
+        n, yield_hat, yield_hat_se
+      )]
+  )) %>%
+  mutate(
+    eval_data = 
+      list(
+        eval_data %>% 
+          .[, profit_hat := crop_price * yield_hat - n_price * n] %>% 
+          .[, profit_hat_se := crop_price * yield_hat_se] 
+      )
+  ) %>% 
+  mutate(opt_n_data = list(
+    opt_n_data <- eval_data %>% 
+      .[, .SD[profit_hat == max(profit_hat), ]] %>% 
+      setnames("n", "opt_n") 
+  )) %>%
+    #=== find the optimal uniform rate ===#
+    mutate(data = list(
+      mutate(
+        data, 
+        opt_n_u = opt_n_data$opt_n
+      )
+    ))
+analysis_se_pred$opt_n_data
+```
+
+
+### QP Prediction
+```{r qp-prediction, cache=FALSE}
+analysis_qp_pred <- analysis_res_qp %>% 
+  #=== input rate sequence by zone to be tested ===#
+  mutate(n_rate_seq = list(
+    data.table(data)[, .(
+        n = seq(
+        quantile(n, 0.025),
+        quantile(n, 0.975),
+        length = 100
+      )
+    )]
+  )) %>% 
+  #=== predict yield values at different input rates ===#
+  mutate(eval_data = list(
+    predict_yield_qp(
+      n_rate_seq = n_rate_seq,
+      est = qp_res
+    ) %>% 
+      .[, type := "opt_v"]%>% 
+      .[, .(
+        n, type, yield_hat
+      )]
+  )) %>% 
+  #=== Adjust yield values to match up with actual yields (this is purely for figures below) ===#
+  mutate(
+    #=== mean predicted yield ===#
+    mean_yield_hat_opt = 
+      list(
+        eval_data[, .(mean_yield_hat = mean(yield_hat))]
+      ), 
+    #=== mean actual yield by zone ===#
+    mean_yield_actual = 
+      list(
+        data.table(data)[, 
+                         .(mean_yield_actual = mean(yield))
+        ]
+      ),
+    eval_data = 
+      list(
+        eval_data %>% 
+          .[, profit_hat := crop_price * yield_hat - n_price * n] 
+      )
+  ) %>% 
+  dplyr::select(
+    - mean_yield_hat_opt, 
+    - mean_yield_actual
+  ) %>% 
+  mutate(opt_n_data = list(
+    opt_n_data <- eval_data %>% 
+      .[, .SD[profit_hat == max(profit_hat), ]] %>% 
+      setnames("n", "opt_n") 
+  )) %>% 
+  #=== find the optimal uniform rate ===#
+    mutate(data = list(
+      mutate(
+        data, 
+        opt_n_u = opt_n_data$opt_n
+        )
+    ))
+
+analysis_qp_pred$opt_n_data
+```
+
+```{r save regression, cache=FALSE}
+saveRDS(analysis_scam_pred, here("Data", ffy, "scam_reg_result.rds"))
+saveRDS(analysis_gam_pred, here("Data", ffy, "gam_reg_result.rds"))
+saveRDS(analysis_se_pred, here("Data", ffy, "se_reg_result.rds"))
+saveRDS(analysis_qp_pred, here("Data", ffy, "qp_reg_result.rds"))
+```
+
+## Profitability Difference
+
+### Testing Profitability difference between SCAM_ONR and MRTN
+```{r scam-onr-mrtn profit difference, cache=FALSE}
+analysis_scam_mrtn <- analysis_scam_pred %>% 
+  #=== Assign gc_rate for all the observations ===#
+  mutate(data = list(
+    assign_gc_rate(data, "N", gc_type_n, gc_rate_n, mrtn, mrtn_min, mrtn_max)
+  )) %>% 
+  #=== Test the statistical sig for profit differential ===#
+  mutate(pi_dif_test = list(
+    get_dif_stat(
+      data = data.table(data), 
+      test_var = "n", 
+      opt_var = "opt_n_u",
+      gc_var = "mrtn_rate",
+      gam_res = gam_res,
+      crop_price = crop_price,
+      n_price = n_price
+    )
+  )) 
+analysis_scam_mrtn$pi_dif_test 
+```
+
+```{r save mrtn-onr-scam-dif, cache=FALSE}
+saveRDS(analysis_scam_mrtn, here("Data", ffy, "scam_onr_mrtn.rds"))
+```
+
+### Testing Profitability difference between GAM_ONR and MRTN
+```{r gam-onr-mrtn profit difference, cache=FALSE}
+analysis_gam_mrtn <- analysis_gam_pred %>% 
+  #=== Assign gc_rate for all the observations ===#
+  mutate(data = list(
+    assign_gc_rate(data, "N", gc_type_n, gc_rate_n, mrtn, mrtn_min, mrtn_max)
+  )) %>% 
+  #=== Test the statistical sig for profit differential ===#
+  mutate(pi_dif_test = list(
+    get_dif_stat(
+      data = data.table(data), 
+      test_var = "n", 
+      opt_var = "opt_n_u",
+      gc_var = "mrtn_rate",
+      gam_res = gam_res,
+      crop_price = crop_price,
+      n_price = n_price
+    )
+  )) 
+analysis_gam_mrtn$pi_dif_test 
+```
+
+```{r save mrtn-onr-gam-dif, cache=FALSE}
+saveRDS(analysis_gam_mrtn, here("Data", ffy, "gam_onr_mrtn.rds"))
+```
+
+### Testing Profitability difference between SE_ONR and MRTN
+```{r mrtn-eonr-sem profit difference, cache=FALSE}
+analysis_se_mrtn <- analysis_se_pred %>% 
+  #=== Assign gc_rate for all the observations ===#
+  mutate(data = list(
+    assign_gc_rate(data, "N", gc_type_n, gc_rate_n, mrtn, mrtn_min, mrtn_max)
+  )) %>% 
+  #=== Test the statistical sig for profit differential ===#
+  mutate(pi_dif_test = list(
+    get_dif_sem(
+      data = data.table(data), 
+      test_var = "n", 
+      opt_var = "opt_n_u",
+      gc_var = "mrtn_rate",
+      est = se_res,
+      crop_price = crop_price,
+      n_price = n_price
+    )
+  )) 
+analysis_se_mrtn$pi_dif_test 
+```
+
+```{r save mrtn-onr-sem-dif, cache=FALSE}
+saveRDS(analysis_se_mrtn, here("Data", ffy, "se_onr_mrtn.rds"))
+```
+
+### Testing Profitability difference between QP_ONR and MRTN
+```{r mrtn-eonr-qp profit difference, cache=FALSE}
+analysis_qp_mrtn <- analysis_qp_pred %>% 
+  #=== Assign gc_rate for all the observations ===#
+  mutate(data = list(
+    assign_gc_rate(data, "N", gc_type_n, gc_rate_n, mrtn, mrtn_min, mrtn_max)
+  )) %>% 
+  #=== Test the statistical sig for profit differential ===#
+  mutate(pi_dif_test = list(
+    get_dif_qp(
+      data = data.table(data), 
+      test_var = "n", 
+      opt_var = "opt_n_u",
+      gc_var = "mrtn_rate",
+      est = qp_res,
+      crop_price = crop_price,
+      n_price = n_price
+    )
+  )) 
+analysis_qp_mrtn$pi_dif_test 
+```
+
+```{r save mrtn-onr-qp-dif, cache=FALSE}
+saveRDS(analysis_qp_mrtn, here("Data", ffy, "qp_onr_mrtn.rds"))
+```
+
+### Testing Profitability difference between MRTN_min and MRTN_max (GAM)
+```{r mrtn_min-eonr profit difference, cache=FALSE}
+analysis_mrtn_min <- analysis_gam_pred %>% 
+  #=== Assign gc_rate for all the observations ===#
+  mutate(data = list(
+    assign_gc_rate(data, "N", gc_type_n, gc_rate_n, mrtn, mrtn_min, mrtn_max)
+  )) %>% 
+  #=== Test the statistical sig for profit differential ===#
+  mutate(pi_dif_test = list(
+    get_dif_stat(
+      data = data.table(data), 
+      test_var = "n", 
+      opt_var = "opt_n_u",
+      gc_var = "mrtn_min",
+      gam_res = gam_res,
+      crop_price = crop_price,
+      n_price = n_price
+    )
+  )) 
+analysis_mrtn_min$pi_dif_test 
+```
+
+```{r save-mrtn-min, cache=FALSE}
+saveRDS(analysis_mrtn_min, here("Data", ffy, "gam_mrtn_min.rds"))
+```
+
+```{r mrtn_max-onr profit difference, cache=FALSE}
+analysis_mrtn_max <- analysis_gam_pred %>% 
+  #=== Assign gc_rate for all the observations ===#
+  mutate(data = list(
+    assign_gc_rate(data, "N", gc_type_n, gc_rate_n, mrtn, mrtn_min, mrtn_max)
+  )) %>% 
+  #=== Test the statistical sig for profit differential ===#
+  mutate(pi_dif_test = list(
+    get_dif_stat(
+      data = data.table(data), 
+      test_var = "n", 
+      opt_var = "opt_n_u",
+      gc_var = "mrtn_max",
+      gam_res = gam_res,
+      crop_price = crop_price,
+      n_price = n_price
+    )
+  )) 
+analysis_mrtn_max$pi_dif_test 
+```
+
+```{r save-mrtn-max, cache=FALSE}
+saveRDS(analysis_mrtn_max, here("Data", ffy, "gam_mrtn_max.rds"))
+```
+
+
+### Testing Profitability difference between MRTN and GC (GAM)
+```{r mrtn gc profit difference, cache=FALSE}
+analysis_mrtn_gc <- analysis_gam_pred %>% 
+  #=== Assign gc_rate for all the observations ===#
+  mutate(data = list(
+    assign_gc_rate(data, "N", gc_type_n, gc_rate_n, mrtn, mrtn_min, mrtn_max)
+  )) %>% 
+  #=== Test the statistical sig for profit differential ===#
+  mutate(pi_dif_test = list(
+    get_dif_stat(
+      data = data.table(data), 
+      test_var = "n", 
+      opt_var = "gc_rate_n",
+      gc_var = "mrtn_rate",
+      gam_res = gam_res,
+      crop_price = crop_price,
+      n_price = n_price
+    )
+  )) 
+analysis_mrtn_gc$pi_dif_test 
+```
+
+```{r save mrtn-gc-dif, cache=FALSE}
+saveRDS(analysis_mrtn_gc, here("Data", ffy, "gam_mrtn_gc.rds"))
+```
+
+

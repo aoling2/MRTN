@@ -1,0 +1,109 @@
+
+# Weather Data
+```{r weather-prep, cache = F}
+hybrid_info <- jsonlite::fromJSON(
+  file.path(
+    here("Data"),
+    "hybrid_info.json"
+  ),
+  flatten = TRUE
+) %>%
+  data.table() %>%
+  .[hybrid == w_field_data$hybrid]
+```
+
+```{r weather-calculations, cache = F}
+weather <- readRDS(here("Data", ffy, "weather_daymet.rds")) %>%
+  data.table() %>%
+  .[year == w_field_data$year] %>% 
+  .[date > as.Date(input_data_s$date, format = "%m/%d/%Y")] %>%
+  .[, precipitation := conv_unit(precipitation, "mm", "inch")] %>%
+  .[, tmax := conv_unit(tmax, "C", "F")] %>%
+  .[, tmin := conv_unit(tmin, "C", "F")] %>%
+  .[, gdd_h := ifelse(tmax >= 86, 86, tmax)] %>%
+  .[, gdd_l := ifelse(tmin <= 50, 50, tmin)] %>%
+  .[, gdd := (gdd_h + gdd_l)/2 - 50] %>%
+  .[, gdd := ifelse(gdd <= 0, 0, gdd)] %>%
+  .[, gdd_cum := cumsum(gdd)] 
+
+date_black <- weather %>%
+  .[gdd_cum >= hybrid_info$gdd_black] %>%
+  .[ , .SD[which.min(date)]] %>%
+  .[, c("date")]
+
+date_poll <- weather %>%
+  .[gdd_cum >= hybrid_info$gdd_poll] %>%
+  .[ , .SD[which.min(date)]] %>%
+  .[, c("date")]
+
+test <- data.frame(matrix(1,1)) %>%
+  mutate(year = list(readRDS(here("Data", ffy, "weather_daymet.rds")) %>%
+  data.table() %>%
+  .[year == w_field_data$year] %>% 
+  .[, precipitation := conv_unit(precipitation, "mm", "inch")] %>%
+  .[month >= 4 & month <= 9] %>%
+  .[, sum(precipitation), by = month] %>%
+  data.frame() %>%
+  dplyr::rename("sum_prec" = "V1") %>%
+  mutate(weather = w_field_data$year))) %>%
+  mutate(hist = list(readRDS(here("Data", ffy, "weather_daymet.rds")) %>%
+  data.table() %>%
+  .[year != w_field_data$year] %>% 
+  .[, precipitation := conv_unit(precipitation, "mm", "inch")] %>%
+  .[month >= 4 & month <= 9] %>%
+  .[, sum(precipitation), by = list(month, year)] %>%
+  .[, mean(V1), by = month] %>%
+  data.frame() %>%
+  dplyr::rename("sum_prec" = "V1") %>%
+  mutate(weather = "historic"))) %>%
+  rowwise() %>%
+  mutate(avg_plot_data = list(rbind(year, hist)))
+plot_data <- test$avg_plot_data[[1]]
+
+weather_graph <- ggplot(plot_data, aes(fill = weather, y = sum_prec, x = month)) + 
+    geom_bar(position="dodge", stat="identity")
+ 
+weather_data <- data.table(
+  "Farm" = w_field_data$farm, 
+  "Field" = w_field_data$field,
+  "Year" = w_field_data$year,
+  "Planting Date" = input_data_s$date,
+  "Hybrid" = w_field_data$hybrid,
+  "prec_poll" = weather %>% 
+    .[date <= (date_poll + 7) & date > (date_poll - 7)] %>%
+    .[, sum(precipitation)],
+  "days_prec_ov_5" = weather %>%
+  .[date <= date_black] %>%
+  .[precipitation > 5] %>%
+  nrow(.),
+  "cum_prec_5" = cbind(weather, weather[, shift(.SD, 1:2, NA, "lead", TRUE), .SDcols=4]) %>%
+  .[, sum_prec_3 := precipitation + precipitation_lead_1 + precipitation_lead_2] %>%
+  .[sum_prec_3 > 5] %>%
+  nrow(.),
+  "prec_gf" = weather %>% 
+    .[date < date_black & date > date_poll] %>%
+    .[, sum(precipitation)],
+  "temp_poll" = weather %>% 
+    .[date <= (date_poll + 7) & date > (date_poll - 7)] %>%
+    .[, tavg := (tmax + tmin)/2] %>%
+    .[, mean(tavg)],
+  "temp_gf" = weather %>% 
+    .[date < date_black & date > date_poll] %>%
+    .[, tavg := (tmax + tmin)/2] %>%
+    .[, mean(tavg)],
+  "prec_season" = weather %>% 
+    .[date < date_black] %>%
+    .[, sum(precipitation)],
+  "temp_season" =  weather %>% 
+    .[date < date_black] %>%
+    .[, tavg := (tmax + tmin)/2] %>%
+    .[, mean(tavg)]) 
+
+```
+
+```{r weather-save, cache = F}
+weather_data %>%
+  data.frame()
+
+saveRDS(weather_data, here("Data", ffy, "weather_info.rds"))
+```

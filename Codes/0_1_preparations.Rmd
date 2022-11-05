@@ -1,0 +1,364 @@
+---
+title: "Preparations for ES"
+author: "Aolin Gong"
+date: "4/1/2022"
+output: html_document
+---
+
+```{r echo = F}
+library(knitr)
+
+opts_chunk$set(
+  fig.align = "center",
+  fig.retina = 5,
+  warning = F,
+  message = F,
+  cache = T,
+  echo = F,
+  fig.cap = TRUE
+)
+```
+
+```{r echo = F}
+#=== Packages ===#
+library(sf)
+library(data.table)
+library(dplyr)
+library(data.table)
+library(modelsummary)
+library(patchwork)
+library(flextable)
+library(officedown)
+library(here)
+library(officer)
+library(latex2exp)
+source(here("./Code/functions.R"))
+```
+
+```{r historical prices, cache=TRUE}
+corn_price <- data.table(year = 2015:2021, 
+                         corn = c(3.81,3.53,3.48,3.66,3.92,4.17,6.29))
+# corn_price$corn_price <- round(corn_price$corn_price/25.40, digits=2)
+n_price <- data.table(year = 2015:2021, 
+                      n = c(0.42,0.35,0.24,0.32,0.36,0.33,0.8))
+# n_price$n_price <- round(n_price$n_price/0.453592, digits=2)
+historical_price <- left_join(corn_price,n_price,by='year')
+historical_price$s <- 3.81
+historical_price$ratio <- round(historical_price$n/historical_price$corn, digits = 2)
+historical_price$year <- as.character(historical_price$year)
+saveRDS(historical_price, here("./Data/historical_price.rds"))
+```
+
+```{r load MRTN rates, include=FALSE}
+var_ls <- c("MRTN",
+            "MRTN_min",
+            "MRTN_max"
+)
+region_ls <- c("Northern_Illinois",
+               "Southern_Illinois",
+               "Central_Illinois",
+               "Ohio"
+)
+mrtn <- CJ(region = region_ls, year = 2016:2021, MRTN = 0, MRTN_min = 0, MRTN_max = 0)
+mrtn[region == 'Northern_Illinois' & year == 2016, 'MRTN'] <- 178
+mrtn[region == 'Northern_Illinois' & year == 2016, 'MRTN_min'] <- 161
+mrtn[region == 'Northern_Illinois' & year == 2016, 'MRTN_max'] <- 196
+mrtn[region == 'Southern_Illinois' & year == 2016,'MRTN'] <- 195
+mrtn[region == 'Southern_Illinois' & year == 2016,'MRTN_min'] <- 183
+mrtn[region == 'Southern_Illinois' & year == 2016,'MRTN_max'] <- 210
+mrtn[region == 'Central_Illinois' & year == 2016,'MRTN'] <- 177
+mrtn[region == 'Central_Illinois' & year == 2016,'MRTN_min'] <- 164
+mrtn[region == 'Central_Illinois' & year == 2016,'MRTN_max'] <- 191
+mrtn[region == 'Ohio' & year == 2016,'MRTN'] <- 183
+mrtn[region == 'Ohio' & year == 2016,'MRTN_min'] <- 165
+mrtn[region == 'Ohio' & year == 2016,'MRTN_max'] <- 200
+mrtn[region == 'Northern_Illinois' & year == 2017, 'MRTN'] <- 181
+mrtn[region == 'Northern_Illinois' & year == 2017, 'MRTN_min'] <- 155
+mrtn[region == 'Northern_Illinois' & year == 2017, 'MRTN_max'] <- 188
+mrtn[region == 'Southern_Illinois' & year == 2017,'MRTN'] <- 200
+mrtn[region == 'Southern_Illinois' & year == 2017,'MRTN_min'] <- 186
+mrtn[region == 'Southern_Illinois' & year == 2017,'MRTN_max'] <- 217
+mrtn[region == 'Central_Illinois' & year == 2017,'MRTN'] <- 182
+mrtn[region == 'Central_Illinois' & year == 2017,'MRTN_min'] <- 167
+mrtn[region == 'Central_Illinois' & year == 2017,'MRTN_max'] <- 197
+mrtn[region == 'Ohio' & year == 2017,'MRTN'] <- 180
+mrtn[region == 'Ohio' & year == 2017,'MRTN_min'] <- 163
+mrtn[region == 'Ohio' & year == 2017,'MRTN_max'] <- 198
+mrtn[region == 'Northern_Illinois' & year == 2018, 'MRTN'] <- 188
+mrtn[region == 'Northern_Illinois' & year == 2018, 'MRTN_min'] <- 169 
+mrtn[region == 'Northern_Illinois' & year == 2018, 'MRTN_max'] <- 207
+mrtn[region == 'Southern_Illinois' & year == 2018,'MRTN'] <- 217
+mrtn[region == 'Southern_Illinois' & year == 2018,'MRTN_min'] <- 198
+mrtn[region == 'Southern_Illinois' & year == 2018,'MRTN_max'] <- 239
+mrtn[region == 'Central_Illinois' & year == 2018,'MRTN'] <- 196
+mrtn[region == 'Central_Illinois' & year == 2018,'MRTN_min'] <- 178
+mrtn[region == 'Central_Illinois' & year == 2018,'MRTN_max'] <- 213
+mrtn[region == 'Ohio' & year == 2018,'MRTN'] <- 200
+mrtn[region == 'Ohio' & year == 2018,'MRTN_min'] <- 179
+mrtn[region == 'Ohio' & year == 2018,'MRTN_max'] <- 219
+mrtn[region == 'Northern_Illinois' & year == 2019, 'MRTN'] <- 178
+mrtn[region == 'Northern_Illinois' & year == 2019, 'MRTN_min'] <- 160 
+mrtn[region == 'Northern_Illinois' & year == 2019, 'MRTN_max'] <- 195
+mrtn[region == 'Southern_Illinois' & year == 2019,'MRTN'] <- 206
+mrtn[region == 'Southern_Illinois' & year == 2019,'MRTN_min'] <- 191
+mrtn[region == 'Southern_Illinois' & year == 2019,'MRTN_max'] <- 224
+mrtn[region == 'Central_Illinois' & year == 2019,'MRTN'] <- 186
+mrtn[region == 'Central_Illinois' & year == 2019,'MRTN_min'] <- 171
+mrtn[region == 'Central_Illinois' & year == 2019,'MRTN_max'] <- 202
+mrtn[region == 'Ohio' & year == 2019,'MRTN'] <- 186
+mrtn[region == 'Ohio' & year == 2019,'MRTN_min'] <- 169
+mrtn[region == 'Ohio' & year == 2019,'MRTN_max'] <- 205
+mrtn[region == 'Northern_Illinois' & year == 2020, 'MRTN'] <- 175
+mrtn[region == 'Northern_Illinois' & year == 2020, 'MRTN_min'] <- 159
+mrtn[region == 'Northern_Illinois' & year == 2020, 'MRTN_max'] <- 192
+mrtn[region == 'Southern_Illinois' & year == 2020,'MRTN'] <- 204
+mrtn[region == 'Southern_Illinois' & year == 2020,'MRTN_min'] <- 189
+mrtn[region == 'Southern_Illinois' & year == 2020,'MRTN_max'] <- 220
+mrtn[region == 'Central_Illinois' & year == 2020,'MRTN'] <- 184
+mrtn[region == 'Central_Illinois' & year == 2020,'MRTN_min'] <- 170
+mrtn[region == 'Central_Illinois' & year == 2020,'MRTN_max'] <- 200
+mrtn[region == 'Ohio' & year == 2020,'MRTN'] <- 185
+mrtn[region == 'Ohio' & year == 2020,'MRTN_min'] <- 168
+mrtn[region == 'Ohio' & year == 2020,'MRTN_max'] <- 202
+mrtn[region == 'Northern_Illinois' & year == 2021, 'MRTN'] <- 182
+mrtn[region == 'Northern_Illinois' & year == 2021, 'MRTN_min'] <- 165 
+mrtn[region == 'Northern_Illinois' & year == 2021, 'MRTN_max'] <- 199
+mrtn[region == 'Southern_Illinois' & year == 2021,'MRTN'] <- 210
+mrtn[region == 'Southern_Illinois' & year == 2021,'MRTN_min'] <- 194
+mrtn[region == 'Southern_Illinois' & year == 2021,'MRTN_max'] <- 228
+mrtn[region == 'Central_Illinois' & year == 2021,'MRTN'] <- 190
+mrtn[region == 'Central_Illinois' & year == 2021,'MRTN_min'] <- 175
+mrtn[region == 'Central_Illinois' & year == 2021,'MRTN_max'] <- 206
+mrtn[region == 'Ohio' & year == 2021,'MRTN'] <- 192
+mrtn[region == 'Ohio' & year == 2021,'MRTN_min'] <- 175
+mrtn[region == 'Ohio' & year == 2021,'MRTN_max'] <- 210
+mrtn$year <- as.character(mrtn$year)
+saveRDS(mrtn, here("./Data/mrtn.rds"))
+```
+
+```{r load field info, include=FALSE}
+field_year_ls <- c(
+  "Larson_EB2_2017",
+  "Larson_OC1_2018",
+  "Larson_BF2_2020",
+  "Nelson_DougsHome_2017",
+  "Nelson_DougsHome_2021",
+  "Nelson_Wirth_2020",
+  "Nelson_DJWest_2021",
+  "Rohrscheib_Almy_2018",
+  "Rohrscheib_AlmyMain_2020",
+  "Rohrscheib_Brach_2016",
+  "Sasse_JensenEast_2016",
+  "Sasse_JensenEast_2018",
+  "Sasse_JensenEast_2020",
+  "Sasse_JensenWest_2017",
+  "Sasse_JensenWest_2021",
+  "Gingerich_Malacarne1_2017",
+  "Gingerich_Malacarne1_2019",
+  "Gingerich_Field2_2018",
+  "Wendte_LaueLib80_2017",
+  "Wendte_LaueLib80_2019",
+  "Wendte_LaueLib80_2021",
+  "Wendte_Snider_2018",
+  "Bohnhoff_Adams_2016",
+  "Bohnhoff_Adams_2018",
+  "Bohnhoff_Adams_2020",
+  "Bohnhoff_Schormann_2016",
+  "Bohnhoff_Schormann_2018",
+  "Bohnhoff_Schormann_2020",
+  "Bohnhoff_Tims_2017",
+  "Bohnhoff_Tims_2019",
+  "Hord_F98_2017",
+  "Hord_F98_2019",
+  "Hord_F98_2021",
+  "Hord_F17_2018",
+  "Hord_F17_2020", 
+  "Hord_F104_2021",
+  "Niese_98xTom_2018",
+  "Overton_Richter77_2017",
+  "Campbell_Goldenrod_2019",
+  "Campbell_Goldenrod_2021",
+  "Gould_BeithRoadNorth_2019",
+  "Gould_Maras_2020"
+)
+
+farm_field_year_ls <- CJ(obs = 1:length(field_year_ls), farm = "", field = "", year = "")
+for (i in 1:length(field_year_ls)){
+farm_field_year_ls[i,]$farm <- strsplit(field_year_ls[i], "_")[[1]][1]
+farm_field_year_ls[i,]$field <- strsplit(field_year_ls[i], "_")[[1]][2]
+farm_field_year_ls[i,]$year <- strsplit(field_year_ls[i], "_")[[1]][3]
+}
+
+farm_field_year_ls <- farm_field_year_ls%>%
+                         mutate(
+                         fake_farm = case_when(
+                         farm == "Bohnhoff"   ~ "BO",
+                         farm == "Wendte"     ~ "WE",
+                         farm == "Campbell"   ~ "CA",
+                         farm == "Larson"     ~ "LA",
+                         farm == "Nelson"     ~ "NE",
+                         farm == "Gould"      ~ "GO",
+                         farm == "Gingerich"  ~ "GI",
+                         farm == "Overton"    ~ "OV",
+                         farm == "Rohrscheib" ~ "RO",
+                         farm == "Sasse"      ~ "SA",
+                         farm == "Hord"       ~ "HO",
+                         farm == "Niese"      ~ "NI"
+                         ),
+                         fake_field = case_when(
+                         field == "Field2"         ~ "Field1",
+                         field == "Malacarne1"     ~ "Field2",
+                         field == "Richter77"      ~ "Field3",
+                         field == "Almy"           ~ "Field4",
+                         field == "AlmyMain"       ~ "Field5",
+                         field == "Brach"          ~ "Field6",
+                         field == "JensenEast"     ~ "Field7",
+                         field == "JensenWest"     ~ "Field8",
+                         field == "BeithRoadNorth" ~ "Field9",
+                         field == "Maras"          ~ "Field10",
+                         field == "BF2"            ~ "Field11",
+                         field == "EB2"            ~ "Field12",
+                         field == "OC1"            ~ "Field13",
+                         field == "DJWest"         ~ "Field14",
+                         field == "DougsHome"      ~ "Field15",
+                         field == "Wirth"          ~ "Field16",
+                         field == "Adams"          ~ "Field17",
+                         field == "Schormann"      ~ "Field18",
+                         field == "Tims"           ~ "Field19",
+                         field == "Goldenrod"      ~ "Field20",
+                         field == "LaueLib80"      ~ "Field21",
+                         field == "Snider"         ~ "Field22",
+                         field == "F104"           ~ "Field23",
+                         field == "F17"            ~ "Field24",
+                         field == "F98"            ~ "Field25",
+                         field == "98xTom"         ~ "Field26"),
+                         region = case_when(
+                         farm == "Bohnhoff" | farm == "Wendte" | farm == "Campbell" ~ "Southern_Illinois",
+                         farm == "Larson" | farm == "Nelson" | farm == "Gould"   ~ "Northern_Illinois",
+                         farm == "Gingerich" | farm == "Overton" | 
+                         farm == "Rohrscheib" | farm == "Sasse" ~ "Central_Illinois",
+                         farm == "Hord" | farm == "Niese"   ~ "Ohio"
+                         ),
+                         state = case_when(
+                         farm == "Bohnhoff" | farm == "Wendte" | farm == "Gould" |
+                         farm == "Larson" | farm == "Nelson" | farm == "Campbell" |
+                         farm == "Gingerich" | farm == "Overton" | 
+                         farm == "Rohrscheib" | farm == "Sasse" ~ "Illinois",
+                         farm == "Hord" | farm == "Niese"   ~ "Ohio"
+                         )) %>%
+  arrange(state, region, farm, field) 
+
+saveRDS(farm_field_year_ls, here("./Data/farm_field_year_ls.rds"))
+
+farm_field_ls <- farm_field_year_ls[,-c("obs", "year")] %>%
+                    distinct()
+
+saveRDS(farm_field_ls,here("./Data/farm_field_ls.rds"))
+
+all_field_data <- data.table()
+for (i in 1:length(field_year_ls)) {
+  print(i)
+  all_field_data <- rbind(all_field_data, data_summary(field_year_ls[i]))
+}
+
+all_field_data <- all_field_data%>%
+                         mutate(
+                         fake_farm = case_when(
+                         farm == "Bohnhoff"   ~ "BO",
+                         farm == "Wendte"     ~ "WE",
+                         farm == "Campbell"   ~ "CA",
+                         farm == "Larson"     ~ "LA",
+                         farm == "Nelson"     ~ "NE",
+                         farm == "Gould"      ~ "GO",
+                         farm == "Gingerich"  ~ "GI",
+                         farm == "Overton"    ~ "OV",
+                         farm == "Rohrscheib" ~ "RO",
+                         farm == "Sasse"      ~ "SA",
+                         farm == "Hord"       ~ "HO",
+                         farm == "Niese"      ~ "NI"
+                         ),
+                         fake_field = case_when(
+                         field == "Field2"         ~ "Field1",
+                         field == "Malacarne1"     ~ "Field2",
+                         field == "Richter77"      ~ "Field3",
+                         field == "Almy"           ~ "Field4",
+                         field == "AlmyMain"       ~ "Field5",
+                         field == "Brach"          ~ "Field6",
+                         field == "JensenEast"     ~ "Field7",
+                         field == "JensenWest"     ~ "Field8",
+                         field == "BeithRoadNorth" ~ "Field9",
+                         field == "Maras"          ~ "Field10",
+                         field == "BF2"            ~ "Field11",
+                         field == "EB2"            ~ "Field12",
+                         field == "OC1"            ~ "Field13",
+                         field == "DJWest"         ~ "Field14",
+                         field == "DougsHome"      ~ "Field15",
+                         field == "Wirth"          ~ "Field16",
+                         field == "Adams"          ~ "Field17",
+                         field == "Schormann"      ~ "Field18",
+                         field == "Tims"           ~ "Field19",
+                         field == "Goldenrod"      ~ "Field20",
+                         field == "LaueLib80"      ~ "Field21",
+                         field == "Snider"         ~ "Field22",
+                         field == "F104"           ~ "Field23",
+                         field == "F17"            ~ "Field24",
+                         field == "F98"            ~ "Field25",
+                         field == "98xTom"         ~ "Field26"),
+                         region = case_when(
+                         farm == "Bohnhoff" | farm == "Wendte" | farm == "Campbell" ~"Southern_Illinois",
+                         farm == "Larson" | farm == "Nelson" | farm == "Gould"   ~ "Northern_Illinois",
+                         farm == "Gingerich" | farm == "Overton" | 
+                         farm == "Rohrscheib" | farm == "Sasse" ~ "Central_Illinois",
+                         farm == "Hord" | farm == "Niese"   ~ "Ohio"
+                         ),
+                         state = case_when(
+                         farm == "Bohnhoff" | farm == "Wendte" | farm == "Gould" |
+                         farm == "Larson" | farm == "Nelson" | farm == "Campbell" |
+                         farm == "Gingerich" | farm == "Overton" | 
+                         farm == "Rohrscheib" | farm == "Sasse" ~ "Illinois",
+                         farm == "Hord" | farm == "Niese"   ~ "Ohio"
+                         )) %>%
+  arrange(state, region, farm, field) 
+
+all_field_data <- left_join(all_field_data, mrtn, by = c('region', 'year'))
+
+excluded_field <- all_field_data %>%
+  filter(farm == "Sasse" & field =="JensenWest" & year == 2017 |
+         farm == "Bohnhoff" & field =="Adams" & year == 2018 |
+         farm == "Bohnhoff" & field =="Schormann" & year == 2018 |
+         farm == "Campbell"& field =="Goldenrod" & year == 2021)
+
+all_field_data$vc <- case_when(
+        do.call(paste0, all_field_data) %in% do.call(paste0, excluded_field) == TRUE ~ "invalid",
+        do.call(paste0, all_field_data) %in% do.call(paste0, excluded_field) == FALSE ~ "valid"              )
+saveRDS(all_field_data,here("./Data/all_field_data.rds"))
+# saveRDS(excluded_field,here("./Data/excluded_data.rds"))
+```
+
+```{r load data, include=FALSE}
+all_field_data <- readRDS(here("./Data/all_field_data.rds"))%>%
+  arrange(state, region, farm, field) 
+
+summarized_data <- all_field_data %>%
+  # .[order(farm)]%>%
+  .[, .(yield_mean=mean(yild_vl),
+        yield_10=quantile(yild_vl, 0.1),
+        yield_90=quantile(yild_vl, 0.9),
+        yield_sd=sd(yild_vl),
+        n_mean=mean(n_rate),
+        n_10=quantile(n_rate, 0.1),
+        n_90=quantile(n_rate, 0.9),
+        n_sd=sd(n_rate),
+        s_mean=mean(s_rate),
+        s_10=quantile(s_rate, 0.1),
+        s_90=quantile(s_rate, 0.9),
+        s_sd=sd(s_rate)
+        ),
+    by=c("fake_farm", 
+         "fake_field",
+         "year"
+         )] %>%
+    mutate_if(is.numeric, round, digits = 1)
+
+saveRDS(summarized_data,here("./Data/summarized_data.rds"))
+```

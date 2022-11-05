@@ -1,0 +1,307 @@
+# ---
+# title: "Graphs for ES"
+# author:
+#   - Aolin Gong^[University of Illinois, Urbana-Champaign, aoling2@illinois.edu]
+# output: html_document
+# 
+# ---
+```{r figure-preperation, echo = F}
+library(knitr)
+
+opts_chunk$set(
+  fig.align = "center",
+  fig.retina = 5,
+  warning = F,
+  message = F,
+  cache = T,
+  echo = F,
+  fig.cap = TRUE
+)
+```
+
+```{r figure-library, cache = F}
+#=== Packages ===#
+library(sf)
+library(raster)
+library(ggplot2)
+library(data.table)
+library(magrittr)
+library(viridis)
+library(dplyr)
+library(data.table)
+library(patchwork)
+library(here)
+library(gstat)
+library(latex2exp)
+source(here("./Code/functions.R"))
+```
+
+```{r fig.id = "conceptual-yield", cache = TRUE, fig.cap = "The quadratic plateau of the estimated yield response to nitrogen with the estimated parameters"}
+
+a = 216.25625858
+b = 10.10459998
+c = -0.06728008
+
+low <- function(x){
+  (a + b * x + c * I(x^2)) * (x <= -0.5 * b/c) + (a + I(-b^2/(4 * c))) * (x > -0.5 * b/c)
+}
+
+plot_data <- data.table(x = seq(8, 82, length = 1000)) %>% 
+ .[,y_VIlow := low(x)] %>% 
+  melt(id.var = "x") %>% 
+  .[, type := case_when(
+    variable == "y_VIlow" ~ "VI_low"
+  )]
+
+find_point_x <- plot_data%>%filter(variable == 'y_VIlow', x >= 62, x<=62.5)
+
+df_conceptual <- data.frame(
+  xl = find_point_x[6, x],
+  yl = find_point_x[6, value]
+)
+
+slope_conceptual = 0.15
+
+df_conceptual <- df_conceptual%>%
+  data.table()%>%
+  .[, `:=` (
+    xl1 = xl + 11,
+    xl2 = xl - 14,
+    yl1 = yl + slope_conceptual*11*12.5+1,
+    yl2 = yl - slope_conceptual*14*12.5+1
+  )]
+
+df_conceptual_1 <- data.frame(
+  x = df_conceptual[, c(xl1, xl2)],
+  y = df_conceptual[, c(yl1, yl2)],
+  group = c('VI_low', 'VI_low')
+)
+
+#--- conceptual steps figure ---#
+conceptual_yield <- ggplot()+
+  geom_line(aes(x = x, y = value, color = type), size = 0.9, data = plot_data, se = FALSE)+
+  scale_color_manual(
+    values = c(
+      "VI_low" = "#2E86C1"
+    )
+  )+
+  geom_linerange(aes(x=8, y=NULL, ymin=240, ymax=740))+
+  geom_linerange(aes(x=NULL, y=240, xmin=8, xmax=85))+
+  labs(x = 'Side-dressing N Rate', y ='Yield') +
+  geom_point(aes(x = xl, y = yl), data = df_conceptual)+
+  #--- tangent line ---#
+  geom_line(aes(x = x, y = y, group = group), color = '#000000', size = 0.4, data = df_conceptual_1)+
+  #--- angle h-line ---#
+  geom_segment(aes(x = df_conceptual$xl2, y = df_conceptual$yl2, xend = df_conceptual$xl, yend = df_conceptual$yl2), size = 0.4, linetype = 'solid')+
+  #--- EONR vline ---#
+  geom_segment(aes(x = df_conceptual$xl, xend = df_conceptual$xl, y = df_conceptual$yl, yend = 240), linetype = 'dashed', size = 0.3)+
+  geom_segment(aes(x = -0.5 * b/c, xend = -0.5 * b/c, y = a + I(-b^2/(4 * c)), yend = 240), linetype = 'dashed', size = 0.3)+
+  #--- curve ---#
+  geom_curve(aes(x = df_conceptual$xl - 5.8, xend = df_conceptual$xl - 5.5, y = df_conceptual$yl - 10, yend = df_conceptual$yl2), curvature = -0.3)+
+  #--- text for the ratio ---#
+  geom_text(aes(x = df_conceptual$xl2 + 8, y =455, label = TeX("$\\frac{P_N}{P_C}$", output = "character")), parse = TRUE, stat = 'unique', size = 5, family = 'Times')+
+  geom_segment(aes(x = df_conceptual$xl2 + 8, xend = df_conceptual$xl2 + 8, y = df_conceptual$yl2- 60, yend = df_conceptual$yl - 35), 
+               arrow = arrow(length = unit(0.18, 'cm')), size = 0.3)+
+  #--- text for estimated yield response curve at site1 ---#
+  annotate('text', x = 66, y =640, label = 'Yield Response to Nitrogen:', size = 5, color = '#2E86C1', family = 'Times')+
+  annotate('text', x = 92, y = 636, parse = TRUE, label = (TeX(r'($$\textit{f_i(N)}$$)')), color = "#2E86C1", size = 5.4, family = "Times", fontface = 5)+
+  # geom_segment(aes(x = 75, xend = 78, y = 680, yend = 610), arrow = arrow(length = unit(0.15, 'cm')), size = 0.3, color = '#2E86C1')+
+  annotate('text', x = df_conceptual$xl + 2, y = 240-32, label = (TeX(r'($$N_{i, Profit}^{*}$$)')), size = 5, color = '#2E86C1', family = 'Times')+
+  annotate('text', x = -0.5 * b/c + 2, y = 240-32, label = (TeX(r'($$N_{i, Yield}^{*}$$)')), size = 5, color = '#2E86C1', family = 'Times')+
+  annotate('text', x = 90, y = 266, label = 'N Application Rate', size = 4.5, family = 'Times')+
+  annotate('text', x = 8, y = 760, label = 'Yield', size = 4.5, family = 'Times')+
+  coord_fixed(0.1)+
+  xlim(8, 100)+
+  theme_void()+
+  theme(legend.position = "none")
+
+conceptual_yield
+
+ggsave(conceptual_yield, file=here("Figures", "conceptual_yield.png"),height=4,width=5.6)
+```
+
+```{r fig.id = "treatment-map", cache = TRUE, fig.cap = "The treatment map of the 2017 checkerboard trial"}
+treatment <- read_sf(here('./Data/trial_design/trial-design.shp'))
+treatment_map <- ggplot(treatment) +
+  geom_sf(aes(fill = (NRATE_Gal3*11.06*0.32+192)*1.12085)) +
+  scale_fill_distiller(palette = "Reds", direction = 1) +
+  theme_bw() +
+  theme_void() +
+  labs(fill = "N rates (kg/ha)") +
+  theme(legend.position = "bottom") +
+  theme(
+    legend.title = element_text(size = 9),
+    legend.text = element_text(size = 9),
+    legend.key.size = unit(0.4, "cm"),
+    legend.key.width = unit(0.6, "cm")
+  )
+
+treatment_map
+
+saveRDS(treatment_map, here("Figures", "treatment_map.rds"))
+```
+
+```{r gam yield response functions, cache=FALSE}
+farm_field_year_ls <- readRDS(here("./Data/farm_field_year_ls.rds"))
+
+for (i in 1:nrow(farm_field_year_ls)){
+  farm_temp <- farm_field_year_ls[i,]$farm
+  fields_temp <- farm_field_year_ls[farm == farm_temp, ]
+  
+  analysis_res_e_all <- data.table()
+  
+  for (j in 1:nrow(fields_temp)){
+    
+  ffy <- paste(fields_temp[j]$farm, fields_temp[j]$field, fields_temp[j]$year, sep = "_")
+  
+  analysis_eval_data_temp <- readRDS(here("Data", ffy, "gam_reg_result.rds")) 
+  
+  analysis_eval_data_temp <- analysis_eval_data_temp$eval_data[[1]] %>%
+    data.table() %>%
+    mutate(
+    farm =  strsplit(ffy, "_")[[1]][1],
+    field = strsplit(ffy, "_")[[1]][2],
+    year =  strsplit(ffy, "_")[[1]][3],
+    field_year = paste(strsplit(ffy, "_")[[1]][2],year = strsplit(ffy, "_")[[1]][3], sep = "_")
+    )
+  analysis_res_e_all <- if(length(analysis_res_e_all) == 0){
+                        analysis_eval_data_temp} else{rbind(analysis_res_e_all, analysis_eval_data_temp)}
+  }
+
+  setDT(analysis_res_e_all)[farm_field_year_ls, fake_farm := fake_farm, on = .(farm, field, year)]
+  setDT(analysis_res_e_all)[farm_field_year_ls, fake_field := fake_field, on = .(farm, field, year)]
+  
+  yield_response_n <- analysis_res_e_all %>% 
+  mutate(
+    ymin = min(yield_hat - 1.96 * yield_hat_se) - 10
+  ) %>% 
+  # filter(., type == "opt_v")%>% 
+               ggplot(data = .)+
+               geom_line(aes(y = yield_hat, x = n, color = year)) +
+               geom_ribbon(
+                 aes(
+                   ymin = yield_hat - 1.96 * yield_hat_se, 
+                   ymax = yield_hat + 1.96 * yield_hat_se, 
+                   x = n,
+                   fill = year
+                 ),
+                 alpha = 0.4
+               ) +
+               labs(x = 'Nitrogen', y = "Yield"
+                    # title = paste0("Yield_Response_N_",farm_temp), 
+                    ) +
+               # ylim(ymin, NA) +
+               facet_wrap(~fake_field,)
+  
+  
+  saveRDS(yield_response_n, here("Figures", paste0("yield_response_n_", farm_temp, ".rds")))
+  ggsave(yield_response_n, file = here("Figures", paste0("yield_response_n_", farm_temp, ".png")), height = 5, width = 6)
+  
+}
+
+```
+
+```{r se yield response functions, cache=FALSE}
+farm_field_year_ls <- readRDS(here("./Data/farm_field_year_ls.rds")) %>%
+                .[farm == "Hord",]
+
+for (i in 1:nrow(farm_field_year_ls)){
+  farm_temp <- farm_field_year_ls[i,]$farm
+  fields_temp <- farm_field_year_ls[farm == farm_temp, ]
+  
+  analysis_res_e_all <- data.table()
+  
+  for (j in 1:nrow(fields_temp)){
+    
+  ffy <- paste(fields_temp[j]$farm, fields_temp[j]$field, fields_temp[j]$year, sep = "_")
+  
+  analysis_eval_data_temp <- readRDS(here("Data", ffy, "se_reg_result.rds")) %>%
+    .[2, "eval_data"]
+  
+  analysis_eval_data_temp <- analysis_eval_data_temp$eval_data[[1]] %>%
+    data.table() %>%
+    mutate(
+    farm =  strsplit(ffy, "_")[[1]][1],
+    field = strsplit(ffy, "_")[[1]][2],
+    year =  strsplit(ffy, "_")[[1]][3],
+    field_year = paste(strsplit(ffy, "_")[[1]][2],year = strsplit(ffy, "_")[[1]][3], sep = "_")
+    )
+  analysis_res_e_all <- if(nrow(analysis_res_e_all) == 0){
+                        analysis_eval_data_temp} else{rbind(analysis_res_e_all, analysis_eval_data_temp)}
+  }
+  
+  setDT(analysis_res_e_all)[farm_field_year_ls, fake_farm := fake_farm, on = .(farm, field, year)]
+  setDT(analysis_res_e_all)[farm_field_year_ls, fake_field := fake_field, on = .(farm, field, year)]
+ 
+  yield_response_n <- analysis_res_e_all %>% 
+  mutate(
+    ymin = min(yield_hat - 1.96 * yield_hat_se) - 10
+  ) %>% 
+  # filter(., type == "opt_v")%>% 
+               ggplot(data = .)+
+               geom_line(aes(y = yield_hat, x = input_rate, color = year)) +
+               geom_ribbon(
+                 aes(
+                   ymin = yield_hat - 1.96 * yield_hat_se, 
+                   ymax = yield_hat + 1.96 * yield_hat_se, 
+                   x = input_rate,
+                   fill = year
+                 ),
+                 alpha = 0.4
+               ) +
+               labs(x = 'Nitrogen', y = "Yield"
+                    # title = paste0("Yield_Response_N_",farm_temp), 
+                    ) +
+               # ylim(ymin, NA) +
+               facet_wrap(~fake_field,)
+  
+  yield_response_n
+  
+  saveRDS(yield_response_n, here("Figures", "hord_se_yield_response_n.rds"))
+ # ggsave(yield_response_n, file = here("Figures", paste0("Yield_Response_N_", farm_temp, ".png")), height = 5, width = 6)
+  
+}
+
+```
+
+```{r yield response functions, cache=FALSE}
+  ffy <- "Wendte_LaueLib80_2021"
+
+  analysis_eval_data_temp <- readRDS(here("Data", ffy, "gam_reg_result.rds")) 
+  
+  analysis_eval_data_temp <- analysis_eval_data_temp$eval_data[[1]] %>%
+    data.table() %>%
+    mutate(
+    farm =  strsplit(ffy, "_")[[1]][1],
+    field = strsplit(ffy, "_")[[1]][2],
+    year =  strsplit(ffy, "_")[[1]][3]
+    )
+  yield_response_n <- analysis_eval_data_temp %>% 
+               ggplot(data = .)+
+               # geom_rect(aes(xmin=295.8, xmax=319.1, ymin=210, ymax=Inf)) +
+               # geom_rect(aes(xmin=194, xmax=228, ymin=210, ymax=Inf), fill = '#2E86C1') +
+               geom_line(aes(y = yield_hat, x = n),color = "deepskyblue2") +
+               geom_ribbon(
+                 aes(
+                   ymin = yield_hat - 1.96 * yield_hat_se, 
+                   ymax = yield_hat + 1.96 * yield_hat_se, 
+                   x = n
+                 ),
+                 fill = "skyblue",
+                 alpha = 0.4
+               ) +
+               labs(x = 'Nitrogen', y = "Yield" ) + 
+               theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))+
+
+              # geom_segment(aes(x = 305.9934, y = 210, xend = 305.9934, yend = Inf), linetype = 'dashed') +
+             # geom_segment(aes(x = 295.8, y = 251.4153, xend = 319.1, yend = 251.4153)) +
+               # geom_segment(aes(x = 210, y = 210, xend = 210, yend = Inf), linetype = 'dashed') +
+               # geom_segment(aes(x = 194, y = 224.8, xend = 228, yend = 224.8)) 
+  geom_vline(xintercept = 305.9934, linetype="dashed", 
+                color = "deepskyblue2", size=1) +
+     geom_vline(xintercept = 210, linetype="dashed", 
+                color = "deepskyblue2", size=1)
+  yield_response_n
+```
+
